@@ -34,6 +34,10 @@ class Config:
             print(f"Error parsing config file: {e}, using defaults")
             self._config_data = self._get_defaults()
     
+    def reload_config(self):
+        """Reload configuration from disk"""
+        self._load_config()
+    
     def _get_defaults(self):
         """Return default configuration if file is not found"""
         return {
@@ -50,7 +54,14 @@ class Config:
                 "border_color": [50, 100, 150],
                 "border_width": 2,
                 "selected_border_width": 3,
-                "border_color_selected": [200, 0, 0]
+                "border_color_selected": [200, 0, 0],
+                "classes": [
+                    {"name": "5V", "color": [255, 0, 0]},
+                    {"name": "GRD", "color": [0, 0, 0]},
+                    {"name": "SDA", "color": [0, 0, 255]},
+                    {"name": "SCL", "color": [0, 255, 0]},
+                    {"name": "PWM", "color": [255, 255, 0]}
+                ]
             },
             "connection": {
                 "default_color": [100, 100, 100],

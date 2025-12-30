@@ -14,6 +14,7 @@ from diagram_canvas import DiagramCanvas
 from file_handler import DiagramFileHandler
 from module_handler import ModuleHandler
 from module_dialog import ModuleCreationDialog
+from preferences_dialog import PreferencesDialog
 from diagram_elements import Module, Node
 from properties_panel import PropertiesPanel
 
@@ -33,6 +34,7 @@ class WireDiagramMaker(QMainWindow):
         self.canvas.tool_deactivated.connect(self.on_tool_deactivated)
         self.canvas.selection_changed.connect(self.update_properties_panel)
         self.canvas.mode_changed.connect(self.on_canvas_mode_changed)
+        self.canvas.diagram_modified.connect(self.on_diagram_modified)
 
         # Create file handler
         self.file_handler = DiagramFileHandler(self)
@@ -283,6 +285,11 @@ class WireDiagramMaker(QMainWindow):
         """Handle tool deactivation signal from canvas"""
         self.set_active_tool(None)
 
+    def on_diagram_modified(self):
+        """Handle diagram modification signal from canvas"""
+        self.diagram_modified = True
+        self.update_title()
+
     def on_node_color_changed(self, color):
         """Handle node color change from properties panel"""
         self.canvas.set_selected_nodes_color(color)
@@ -469,11 +476,19 @@ class WireDiagramMaker(QMainWindow):
 
     def on_undo(self):
         """Undo the last action"""
-        self.statusBar().showMessage("Undo - coming soon")
+        if self.canvas.can_undo():
+            self.canvas.undo()
+            self.statusBar().showMessage(f"Undone: {self.canvas.get_undo_description()}")
+        else:
+            self.statusBar().showMessage("Nothing to undo")
 
     def on_redo(self):
         """Redo the last undone action"""
-        self.statusBar().showMessage("Redo - coming soon")
+        if self.canvas.can_redo():
+            self.canvas.redo()
+            self.statusBar().showMessage(f"Redone: {self.canvas.get_redo_description()}")
+        else:
+            self.statusBar().showMessage("Nothing to redo")
 
     def on_select_all(self):
         """Select all elements"""
@@ -481,7 +496,19 @@ class WireDiagramMaker(QMainWindow):
 
     def on_preferences(self):
         """Open preferences dialog"""
-        self.statusBar().showMessage("Preferences - coming soon")
+        preferences_dialog = PreferencesDialog(self)
+        preferences_dialog.preferences_saved.connect(self.on_preferences_saved)
+        preferences_dialog.exec_()
+    
+    def on_preferences_saved(self):
+        """Handle preferences saved signal - refresh UI"""
+        # Refresh all nodes from updated config
+        for node in self.canvas.nodes:
+            node.refresh_from_config()
+        
+        # Refresh canvas
+        self.canvas.update()
+        self.statusBar().showMessage("Preferences saved and reloaded successfully")
 
     def on_about(self):
         """Show about dialog"""
@@ -603,6 +630,27 @@ class WireDiagramMaker(QMainWindow):
         cancel_button.clicked.connect(dialog.reject)
         
         dialog.exec_()
+
+    def closeEvent(self, event):
+        """Handle close event - ask to save if there are unsaved changes"""
+        if self.diagram_modified:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.on_save()
+                event.accept()
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+            else:
+                # No - discard changes and close
+                event.accept()
+        else:
+            # No unsaved changes, close normally
+            event.accept()
 
 
 def main():

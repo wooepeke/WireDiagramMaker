@@ -40,6 +40,13 @@ class Node:
             size
         )
 
+    def refresh_from_config(self):
+        """Refresh node properties from current config"""
+        config = get_config()
+        self.NODE_SIZE = config.get_node_size()
+        self.NODE_RADIUS = self.NODE_SIZE // 2
+        self.update_rect()
+
     def set_highlighted(self, highlighted):
         """Set highlight state"""
         self.highlighted = highlighted
@@ -53,20 +60,16 @@ class Node:
         config = get_config()
         self.update_rect()
 
-        # Determine color based on state
-        if self.selected:
-            selected_color = config.get_node_selected_color()
-            color = QColor(*selected_color)
-        elif self.highlighted:
-            highlighted_color = config.get_node_highlighted_color()
-            color = QColor(*highlighted_color)
-        else:
-            color = self.color  # Use node's color
-
-        painter.setBrush(QBrush(color))
+        # Always use the node's actual color for the fill
+        painter.setBrush(QBrush(self.color))
         
-        # Draw border - thicker for locked nodes
+        # Draw border based on state
         if self.selected:
+            border_color = config.get_node_border_color_selected()
+            border_width = config.get_node_selected_border_width()
+            painter.setPen(QPen(QColor(*border_color), border_width))
+        elif self.highlighted:
+            # Highlighted (hovering over while making connection) - use a brighter outline
             border_color = config.get_node_border_color_selected()
             border_width = config.get_node_selected_border_width()
             painter.setPen(QPen(QColor(*border_color), border_width))
@@ -144,18 +147,19 @@ class Connection:
 
     def draw(self, painter):
         """Draw the connection"""
-        # Draw line with different color if selected
+        # Draw line - use thicker width when selected instead of changing color
         if self.selected:
-            painter.setPen(QPen(QColor(255, 0, 0), 4))  # Red for selected
+            painter.setPen(QPen(self.color, 4))  # Thicker line for selected
         else:
-            painter.setPen(QPen(self.color, 2))  # Use connection's color
+            painter.setPen(QPen(self.color, 2))  # Normal width
         
         painter.drawLine(self.node1.get_center(), self.node2.get_center())
 
         # Draw connection points as small circles
         if self.selected:
-            painter.setBrush(QBrush(QColor(255, 0, 0)))
-            painter.setPen(QPen(QColor(200, 0, 0), 1))
+            # Selected connection - thicker outline
+            painter.setBrush(QBrush(self.color))
+            painter.setPen(QPen(self.color, 2))
         else:
             painter.setBrush(QBrush(self.color))
             painter.setPen(QPen(self.color, 1))

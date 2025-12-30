@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -17,6 +18,7 @@ class DiagramCanvas(QWidget):
     tool_deactivated = pyqtSignal()  # Emitted when a tool action is completed
     selection_changed = pyqtSignal()  # Emitted when selection changes
     mode_changed = pyqtSignal(str)  # Emitted when operation mode changes
+    diagram_modified = pyqtSignal()  # Emitted when diagram is modified
 
     def __init__(self):
         super().__init__()
@@ -61,6 +63,10 @@ class DiagramCanvas(QWidget):
         self.selected_nodes = []
         self.selected_connections = []
 
+        # Undo/Redo stacks
+        self.undo_stack = []
+        self.redo_stack = []
+
         # Default colors for new elements
         default_node_color = config.get_node_default_color()
         self.default_node_color = QColor(*default_node_color)
@@ -72,6 +78,7 @@ class DiagramCanvas(QWidget):
         """Set the current operation mode"""
         self.mode = mode
         self.selected_node = None
+        self.clear_selection()  # Deselect any selected nodes when changing tools
         self.setCursor(Qt.CursorShape.CrossCursor if mode in ["add_node", "add_connection"] else Qt.CursorShape.ArrowCursor)
         self.mode_changed.emit(mode)
 
@@ -248,6 +255,8 @@ class DiagramCanvas(QWidget):
         if self.panning:
             self.panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
+        if self.dragging_node:
+            self.diagram_modified.emit()
         self.dragging_node = None
 
     def add_node(self, pos):
@@ -256,8 +265,8 @@ class DiagramCanvas(QWidget):
         snapped_pos = self.snap_to_grid_point(pos)
         node = Node(f"Node{self.node_counter}", snapped_pos)
         node.color = self.default_node_color
-        self.nodes.append(node)
-        self.update()
+        action = AddNodeAction(self, node)
+        self.execute_action(action)
 
     def add_connection(self, node1, node2):
         """Add a connection between two nodes"""
@@ -278,8 +287,8 @@ class DiagramCanvas(QWidget):
 
         connection = Connection(node1, node2)
         connection.color = node1.color  # Use the node's color for the connection
-        self.connections.append(connection)
-        self.update()
+        action = AddConnectionAction(self, connection)
+        self.execute_action(action)
 
     def get_node_at(self, pos):
         """Get the node at the given position, if any"""
@@ -354,6 +363,9 @@ class DiagramCanvas(QWidget):
 
     def delete_selected(self):
         """Delete all selected nodes and their connections"""
+        if not self.selected_nodes and not self.selected_connections:
+            return
+        
         # Check if any selected node is part of a module
         module_ids_to_delete = set()
         non_module_nodes = []
@@ -364,32 +376,28 @@ class DiagramCanvas(QWidget):
             else:
                 non_module_nodes.append(node)
         
-        # Delete module nodes (entire modules)
+        # Collect nodes to delete
+        nodes_to_delete = list(non_module_nodes)
+        
+        # Find all nodes in the modules to be deleted
         if module_ids_to_delete:
-            # Find all nodes in the modules to be deleted
-            nodes_to_remove = [
+            module_nodes = [
                 node for node in self.nodes 
                 if hasattr(node, 'module_id') and node.module_id in module_ids_to_delete
             ]
-            for node in nodes_to_remove:
-                if node in self.nodes:
-                    self.nodes.remove(node)
+            nodes_to_delete.extend(module_nodes)
         
-        # Delete non-module nodes (can be deleted individually)
-        for node in non_module_nodes:
+        # Create delete actions for nodes and connections
+        for node in nodes_to_delete:
             if node in self.nodes:
-                self.nodes.remove(node)
+                action = DeleteNodeAction(self, node)
+                self.execute_action(action)
         
-        # Remove connections involving deleted nodes
-        self.connections = [
-            conn for conn in self.connections
-            if conn.node1 not in self.selected_nodes and conn.node2 not in self.selected_nodes
-        ]
-        
-        # Remove selected connections (only if they're not connecting module nodes)
+        # Delete selected connections
         for conn in self.selected_connections:
             if conn in self.connections:
-                self.connections.remove(conn)
+                action = DeleteConnectionAction(self, conn)
+                self.execute_action(action)
         
         self.clear_selection()
 
@@ -468,6 +476,7 @@ class DiagramCanvas(QWidget):
         """Set color for all selected nodes"""
         for node in self.selected_nodes:
             node.color = color
+        self.diagram_modified.emit()
         self.update()
 
     def set_selected_nodes_class(self, class_name):
@@ -478,12 +487,14 @@ class DiagramCanvas(QWidget):
             # Update color based on class
             color_tuple = config.get_node_class_color(class_name)
             node.color = QColor(*color_tuple)
+        self.diagram_modified.emit()
         self.update()
 
     def set_selected_connections_color(self, color):
         """Set color for all selected connections"""
         for connection in self.selected_connections:
             connection.color = color
+        self.diagram_modified.emit()
         self.update()
 
     def set_default_node_color(self, color):
@@ -493,6 +504,54 @@ class DiagramCanvas(QWidget):
     def set_default_connection_color(self, color):
         """Set the default color for new connections"""
         self.default_connection_color = color
+
+    def execute_action(self, action):
+        """Execute an action and add it to the undo stack"""
+        action.execute()
+        self.undo_stack.append(action)
+        self.redo_stack.clear()  # Clear redo stack when a new action is performed
+        self.diagram_modified.emit()
+        self.update()
+
+    def undo(self):
+        """Undo the last action"""
+        if self.undo_stack:
+            action = self.undo_stack.pop()
+            action.undo()
+            self.redo_stack.append(action)
+            self.diagram_modified.emit()
+            self.clear_selection()
+            self.update()
+
+    def redo(self):
+        """Redo the last undone action"""
+        if self.redo_stack:
+            action = self.redo_stack.pop()
+            action.execute()
+            self.undo_stack.append(action)
+            self.diagram_modified.emit()
+            self.clear_selection()
+            self.update()
+
+    def can_undo(self):
+        """Check if undo is available"""
+        return len(self.undo_stack) > 0
+
+    def can_redo(self):
+        """Check if redo is available"""
+        return len(self.redo_stack) > 0
+
+    def get_undo_description(self):
+        """Get description of the next undo action"""
+        if self.undo_stack:
+            return self.undo_stack[-1].get_description()
+        return "Undo"
+
+    def get_redo_description(self):
+        """Get description of the next redo action"""
+        if self.redo_stack:
+            return self.redo_stack[-1].get_description()
+        return "Redo"
 
     def paintEvent(self, event):
         """Paint the canvas and all diagram elements"""
