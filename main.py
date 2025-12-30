@@ -13,6 +13,7 @@ from PyQt5.QtGui import QIcon, QColor, QPainter, QPen, QBrush
 from diagram_canvas import DiagramCanvas
 from file_handler import DiagramFileHandler
 from module_handler import ModuleHandler
+from module_dialog import ModuleCreationDialog
 from diagram_elements import Module, Node
 from properties_panel import PropertiesPanel
 
@@ -506,34 +507,16 @@ class WireDiagramMaker(QMainWindow):
             QMessageBox.warning(self, "No Selection", "Please select at least one node to create a module.")
             return
         
-        # Ask for module name
-        module_name, ok = QInputDialog.getText(
-            self,
-            "Create Module",
-            "Enter module name:"
-        )
-        
-        if not ok or not module_name.strip():
-            return
-        
-        # Generate unique module ID
-        module_id = self.module_handler.generate_module_id()
-        
-        # Create module and add selected nodes
-        module = Module(module_id, module_name)
-        for node in selected_nodes:
-            module.add_node(node)
-        
-        # Save module
-        if self.module_handler.save_module(module):
-            # Mark all nodes in the module with module ID for tracking
-            for node in selected_nodes:
-                node.module_id = module_id
-            
-            self.statusBar().showMessage(f"Module '{module_name}' created successfully!")
-            self.canvas.clear_selection()
-        else:
-            QMessageBox.critical(self, "Error", "Failed to save module.")
+        # Open the module creation dialog
+        dialog = ModuleCreationDialog(self.canvas, self.module_handler, self)
+        dialog.module_created.connect(self.on_module_created)
+        dialog.exec_()
+
+    def on_module_created(self, module):
+        """Handle successful module creation"""
+        self.statusBar().showMessage(f"Module '{module.name}' created successfully!")
+        self.canvas.clear_selection()
+        self.canvas.update()
 
     def on_load_module(self):
         """Load a module onto the canvas"""
@@ -580,18 +563,38 @@ class WireDiagramMaker(QMainWindow):
             module = self.module_handler.load_module(module_id)
             
             if module:
-                # Add module nodes to canvas
+                # Count how many instances of this module already exist
+                # Look for nodes with module_id pattern: "original_id_inst_1", "original_id_inst_2", etc.
+                existing_instances = len([n for n in self.canvas.nodes if hasattr(n, 'module_id') and n.module_id.startswith(f"{module_id}_inst_")])
+                
+                # Create a UNIQUE instance ID for this loaded instance
+                instance_number = existing_instances + 1
+                unique_instance_id = f"{module_id}_inst_{instance_number}"
+                
+                # Calculate offset for this instance
+                node_offset = 50
+                offset_x = existing_instances * node_offset
+                offset_y = existing_instances * node_offset
+                
+                # Add module nodes to canvas - create completely independent copies
                 for node in module.nodes:
-                    # Create a copy of the node for the canvas
-                    new_node = Node(node.name, QPoint(node.pos.x(), node.pos.y()))
+                    # Create a completely new, independent node object
+                    new_node = Node(
+                        f"{node.name}_inst{instance_number}",  # Make node names unique per instance
+                        QPoint(
+                            int(node.pos.x() + offset_x),
+                            int(node.pos.y() + offset_y)
+                        )
+                    )
+                    # Copy all properties
                     new_node.node_class = node.node_class
-                    new_node.color = node.color
-                    new_node.module_id = module.module_id
-                    new_node.locked = True  # Lock module nodes so they cannot be moved
+                    new_node.color = QColor(node.color.red(), node.color.green(), node.color.blue())
+                    new_node.module_id = unique_instance_id  # Each instance gets a unique ID!
+                    new_node.locked = True
                     self.canvas.nodes.append(new_node)
                 
                 self.canvas.update()
-                self.statusBar().showMessage(f"Module '{module.name}' loaded successfully!")
+                self.statusBar().showMessage(f"Module '{module.name}' (instance {instance_number}) loaded successfully!")
                 dialog.accept()
             else:
                 QMessageBox.critical(self, "Error", "Failed to load module.")

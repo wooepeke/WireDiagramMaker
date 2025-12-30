@@ -45,6 +45,10 @@ class PropertiesPanel(QWidget):
         conn_panel = self._create_connection_panel()
         self.stacked_widget.addWidget(conn_panel)
 
+        # Panel 3: Module info panel
+        module_panel = self._create_module_panel()
+        self.stacked_widget.addWidget(module_panel)
+
         main_layout.addWidget(self.stacked_widget)
         main_layout.addStretch()
         self.setLayout(main_layout)
@@ -146,6 +150,51 @@ class PropertiesPanel(QWidget):
         panel.setLayout(layout)
         return panel
 
+    def _create_module_panel(self):
+        """Create the module info panel"""
+        panel = QWidget()
+        layout = QVBoxLayout()
+
+        # Title
+        title = QLabel("Module Info")
+        title_font = title.font()
+        title_font.setBold(True)
+        title.setFont(title_font)
+        layout.addWidget(title)
+
+        # Module name display
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Name:")
+        self.module_name_display = QLabel()
+        self.module_name_display.setStyleSheet("font-weight: bold;")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.module_name_display)
+        name_layout.addStretch()
+        layout.addLayout(name_layout)
+
+        # Module ID display
+        id_layout = QHBoxLayout()
+        id_label = QLabel("ID:")
+        self.module_id_display = QLabel()
+        self.module_id_display.setStyleSheet("font-family: monospace; font-size: 10px;")
+        id_layout.addWidget(id_label)
+        id_layout.addWidget(self.module_id_display)
+        id_layout.addStretch()
+        layout.addLayout(id_layout)
+
+        # Node count display
+        count_layout = QHBoxLayout()
+        count_label = QLabel("Nodes:")
+        self.module_node_count = QLabel()
+        count_layout.addWidget(count_label)
+        count_layout.addWidget(self.module_node_count)
+        count_layout.addStretch()
+        layout.addLayout(count_layout)
+
+        layout.addStretch()
+        panel.setLayout(layout)
+        return panel
+
     def on_node_color_select(self):
         """Handle node color selection"""
         color = QColorDialog.getColor(self.node_color, self, "Select Node Color")
@@ -210,9 +259,23 @@ class PropertiesPanel(QWidget):
         self.selected_nodes = nodes
         self.selected_connections = connections
 
+        # Check if all selected nodes belong to the same module
+        module_id = None
+        is_module = False
+        if nodes and all(getattr(node, 'locked', False) and hasattr(node, 'module_id') and node.module_id for node in nodes):
+            # Check if all nodes have the same module_id
+            module_ids = set(node.module_id for node in nodes if hasattr(node, 'module_id'))
+            if len(module_ids) == 1:
+                module_id = module_ids.pop()
+                is_module = True
+
         # Determine which panel to show
-        if nodes and not connections:
-            # Only nodes selected
+        if is_module and module_id:
+            # Module is selected - show module panel
+            self.stacked_widget.setCurrentIndex(3)
+            self.update_module_display(nodes, module_id)
+        elif nodes and not connections:
+            # Only nodes selected (not a module)
             self.stacked_widget.setCurrentIndex(1)
             self.node_mode_label.setText(f"Selected: {len(nodes)} node(s)")
             
@@ -231,3 +294,28 @@ class PropertiesPanel(QWidget):
         else:
             # Nothing selected - show empty panel
             self.stacked_widget.setCurrentIndex(0)
+
+    def update_module_display(self, nodes, module_id):
+        """Update the module panel with module information"""
+        # Extract module name from the first node's data (we'll use a simple approach)
+        # In a real implementation, you might want to load the module from file to get the name
+        self.module_id_display.setText(module_id)
+        self.module_node_count.setText(str(len(nodes)))
+        
+        # Try to find the module name from the module_handler
+        # For now, we'll display the module ID as the name if we can't find it
+        module_name = f"Module {module_id[:4]}"
+        
+        # Check if we can get the actual module name
+        try:
+            from module_handler import ModuleHandler
+            handler = ModuleHandler()
+            modules = handler.get_available_modules()
+            for mod_info in modules:
+                if mod_info["id"] == module_id:
+                    module_name = mod_info["name"]
+                    break
+        except:
+            pass
+        
+        self.module_name_display.setText(module_name)
