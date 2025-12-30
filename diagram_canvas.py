@@ -233,6 +233,15 @@ class DiagramCanvas(QWidget):
 
     def add_connection(self, node1, node2):
         """Add a connection between two nodes"""
+        # Check if nodes have the same class
+        if node1.node_class != node2.node_class:
+            # Show error message
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self.window(), "Connection Error", 
+                                f"Cannot connect {node1.node_class} to {node2.node_class}.\n"
+                                f"Nodes must have the same class to be connected.")
+            return
+
         # Avoid duplicate connections
         for conn in self.connections:
             if (conn.node1 == node1 and conn.node2 == node2) or \
@@ -240,7 +249,7 @@ class DiagramCanvas(QWidget):
                 return
 
         connection = Connection(node1, node2)
-        connection.color = self.default_connection_color
+        connection.color = node1.color  # Use the node's color for the connection
         self.connections.append(connection)
         self.update()
 
