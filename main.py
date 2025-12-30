@@ -28,6 +28,7 @@ class WireDiagramMaker(QMainWindow):
         # Connect canvas signals
         self.canvas.tool_deactivated.connect(self.on_tool_deactivated)
         self.canvas.selection_changed.connect(self.update_properties_panel)
+        self.canvas.mode_changed.connect(self.on_canvas_mode_changed)
 
         # Create file handler
         self.file_handler = DiagramFileHandler(self)
@@ -54,6 +55,9 @@ class WireDiagramMaker(QMainWindow):
         self.properties_panel = PropertiesPanel()
         self.properties_panel.node_color_changed.connect(
             self.on_node_color_changed
+        )
+        self.properties_panel.node_class_changed.connect(
+            self.on_node_class_changed
         )
         self.properties_panel.connection_color_changed.connect(
             self.on_connection_color_changed
@@ -166,6 +170,12 @@ class WireDiagramMaker(QMainWindow):
         self.grid_action.triggered.connect(self.on_toggle_grid)
         view_menu.addAction(self.grid_action)
 
+        self.snap_to_grid_action = QAction("Snap to Grid", self)
+        self.snap_to_grid_action.setCheckable(True)
+        self.snap_to_grid_action.setChecked(False)
+        self.snap_to_grid_action.triggered.connect(self.on_toggle_snap_to_grid)
+        view_menu.addAction(self.snap_to_grid_action)
+
         # Settings menu
         settings_menu = menubar.addMenu("Settings")
 
@@ -259,10 +269,16 @@ class WireDiagramMaker(QMainWindow):
     def on_node_color_changed(self, color):
         """Handle node color change from properties panel"""
         self.canvas.set_selected_nodes_color(color)
+        self.canvas.set_default_node_color(color)
+
+    def on_node_class_changed(self, class_name):
+        """Handle node class change from properties panel"""
+        self.canvas.set_selected_nodes_class(class_name)
 
     def on_connection_color_changed(self, color):
         """Handle connection color change from properties panel"""
         self.canvas.set_selected_connections_color(color)
+        self.canvas.set_default_connection_color(color)
 
     def update_properties_panel(self):
         """Update properties panel with current selection"""
@@ -270,6 +286,10 @@ class WireDiagramMaker(QMainWindow):
             self.canvas.selected_nodes,
             self.canvas.selected_connections
         )
+
+    def on_canvas_mode_changed(self, mode):
+        """Handle canvas mode changes"""
+        self.properties_panel.on_mode_changed(mode)
 
     def on_select_mode(self):
         """Toggle selection mode"""
@@ -359,6 +379,11 @@ class WireDiagramMaker(QMainWindow):
         """Toggle grid visibility"""
         self.canvas.set_show_grid(checked)
         self.statusBar().showMessage(f"Grid {'enabled' if checked else 'disabled'}")
+
+    def on_toggle_snap_to_grid(self, checked):
+        """Toggle snap to grid"""
+        self.canvas.set_snap_to_grid(checked)
+        self.statusBar().showMessage(f"Snap to grid {'enabled' if checked else 'disabled'}")
 
     def on_new_diagram(self):
         """Create a new diagram"""

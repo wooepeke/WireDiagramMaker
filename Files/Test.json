@@ -2,9 +2,33 @@
   "nodes": [
     {
       "name": "Node1",
-      "x": 937,
-      "y": 460
+      "x": 293,
+      "y": 230,
+      "color": {
+        "r": 100,
+        "g": 150,
+        "b": 200
+      }
+    },
+    {
+      "name": "Node2",
+      "x": 576,
+      "y": 404,
+      "color": {
+        "r": 100,
+        "g": 150,
+        "b": 200
+      }
     }
   ],
-  "connections": []
+  "connections": [],
+  "metadata": {
+    "grid_enabled": true,
+    "grid_size": 20,
+    "zoom_level": 0.6944444444444445,
+    "pan_offset": {
+      "x": 37,
+      "y": -37
+    }
+  }
 }

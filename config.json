@@ -1,0 +1,53 @@
+{
+  "grid": {
+    "size": 20,
+    "color": [200, 200, 200],
+    "enabled_by_default": true
+  },
+  "node": {
+    "size": 30,
+    "default_color": [100, 150, 200],
+    "selected_color": [255, 0, 0],
+    "highlighted_color": [150, 200, 255],
+    "border_color": [50, 100, 150],
+    "border_width": 2,
+    "selected_border_width": 3,
+    "border_color_selected": [200, 0, 0],
+    "classes": [
+      {
+        "name": "5V",
+        "color": [255, 0, 0]
+      },
+      {
+        "name": "GRD",
+        "color": [0, 0, 0]
+      },
+      {
+        "name": "SDA",
+        "color": [0, 0, 255]
+      },
+      {
+        "name": "SCL",
+        "color": [0, 255, 0]
+      },
+      {
+        "name": "PWM",
+        "color": [255, 255, 0]
+      }
+    ]
+  },
+  "connection": {
+    "default_color": [100, 100, 100],
+    "width": 2,
+    "hitbox_distance": 10
+  },
+  "zoom": {
+    "min": 0.1,
+    "max": 5.0,
+    "increment": 1.2
+  },
+  "features": {
+    "snap_to_grid_enabled": false,
+    "antialiasing_enabled": true
+  }
+}

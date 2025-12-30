@@ -4,21 +4,28 @@ Basic diagram elements - nodes and connections
 
 from PyQt5.QtCore import QPoint, QRect, QSize
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
+from config_loader import get_config
 
 
 class Node:
     """Represents a node in the wire diagram"""
 
-    NODE_SIZE = 60
-    NODE_RADIUS = NODE_SIZE // 2
-
     def __init__(self, name, pos):
         """Initialize a node"""
+        config = get_config()
+        self.NODE_SIZE = config.get_node_size()
+        self.NODE_RADIUS = self.NODE_SIZE // 2
+        
         self.name = name
         self.pos = pos
         self.highlighted = False
         self.selected = False
-        self.color = QColor(100, 150, 200)  # Default color
+        # Get default class (first one in the list)
+        class_names = config.get_node_class_names()
+        self.node_class = class_names[0] if class_names else "Generic"
+        # Color is determined by class
+        color_tuple = config.get_node_class_color(self.node_class)
+        self.color = QColor(*color_tuple)
         self.update_rect()
 
     def update_rect(self):
@@ -41,13 +48,16 @@ class Node:
 
     def draw(self, painter):
         """Draw the node"""
+        config = get_config()
         self.update_rect()
 
         # Determine color based on state
         if self.selected:
-            color = QColor(255, 0, 0)  # Red for selected
+            selected_color = config.get_node_selected_color()
+            color = QColor(*selected_color)
         elif self.highlighted:
-            color = QColor(150, 200, 255)  # Light blue for highlighted
+            highlighted_color = config.get_node_highlighted_color()
+            color = QColor(*highlighted_color)
         else:
             color = self.color  # Use node's color
 
@@ -55,24 +65,15 @@ class Node:
         
         # Draw border
         if self.selected:
-            painter.setPen(QPen(QColor(200, 0, 0), 3))  # Thick red border
+            border_color = config.get_node_border_color_selected()
+            border_width = config.get_node_selected_border_width()
+            painter.setPen(QPen(QColor(*border_color), border_width))
         else:
-            painter.setPen(QPen(QColor(50, 100, 150), 2))
+            border_color = config.get_node_border_color()
+            border_width = config.get_node_border_width()
+            painter.setPen(QPen(QColor(*border_color), border_width))
         
         painter.drawEllipse(self.pos, self.NODE_RADIUS, self.NODE_RADIUS)
-
-        # Draw label
-        painter.setPen(QPen(QColor(0, 0, 0)))
-        font = painter.font()
-        font.setPointSize(8)
-        painter.setFont(font)
-        text_rect = QRect(
-            int(self.pos.x() - 30),
-            int(self.pos.y() - 10),
-            60,
-            20
-        )
-        painter.drawText(text_rect, 4, self.name)  # 4 = AlignCenter
 
     def get_center(self):
         """Get the center point of the node"""
@@ -82,14 +83,16 @@ class Node:
 class Connection:
     """Represents a wire connection between two nodes"""
 
-    HITBOX_DISTANCE = 10  # Distance in pixels for click detection
-
     def __init__(self, node1, node2):
         """Initialize a connection"""
+        config = get_config()
+        self.HITBOX_DISTANCE = config.get_connection_hitbox_distance()
+        
         self.node1 = node1
         self.node2 = node2
         self.selected = False
-        self.color = QColor(100, 100, 100)  # Default color
+        color_tuple = config.get_connection_default_color()
+        self.color = QColor(*color_tuple)
 
     def set_selected(self, selected):
         """Set selection state"""

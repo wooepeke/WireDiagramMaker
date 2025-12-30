@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection
 from properties_dialog import NodePropertiesDialog
+from config_loader import get_config
 
 
 class DiagramCanvas(QWidget):
@@ -15,11 +16,15 @@ class DiagramCanvas(QWidget):
     # Signals
     tool_deactivated = pyqtSignal()  # Emitted when a tool action is completed
     selection_changed = pyqtSignal()  # Emitted when selection changes
+    mode_changed = pyqtSignal(str)  # Emitted when operation mode changes
 
     def __init__(self):
         super().__init__()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setStyleSheet("background-color: white;")
+
+        # Load configuration
+        config = get_config()
 
         # Lists to store diagram elements
         self.nodes = []
@@ -39,40 +44,66 @@ class DiagramCanvas(QWidget):
         self.node_counter = 0
 
         # Grid settings
-        self.show_grid = True
-        self.grid_size = 20
+        self.show_grid = config.get_grid_enabled_by_default()
+        self.grid_size = config.get_grid_size()
+        self.snap_to_grid = config.is_snap_to_grid_enabled_by_default()
 
         # Pan/zoom settings
         self.pan_offset = QPoint(0, 0)
         self.panning = False
         self.pan_start = QPoint()
         self.zoom_level = 1.0
-        self.min_zoom = 0.1
-        self.max_zoom = 5.0
+        self.min_zoom = config.get_zoom_min()
+        self.max_zoom = config.get_zoom_max()
+        self.zoom_increment = config.get_zoom_increment()
 
         # Selection settings
         self.selected_nodes = []
         self.selected_connections = []
+
+        # Default colors for new elements
+        default_node_color = config.get_node_default_color()
+        self.default_node_color = QColor(*default_node_color)
+        
+        default_connection_color = config.get_connection_default_color()
+        self.default_connection_color = QColor(*default_connection_color)
 
     def set_mode(self, mode):
         """Set the current operation mode"""
         self.mode = mode
         self.selected_node = None
         self.setCursor(Qt.CursorShape.CrossCursor if mode in ["add_node", "add_connection"] else Qt.CursorShape.ArrowCursor)
+        self.mode_changed.emit(mode)
 
     def set_show_grid(self, show):
         """Set whether to show grid"""
         self.show_grid = show
         self.update()
 
+    def set_snap_to_grid(self, snap):
+        """Set whether to snap to grid"""
+        self.snap_to_grid = snap
+
+    def snap_to_grid_point(self, pos):
+        """Snap a position to the nearest grid point"""
+        if not self.snap_to_grid:
+            return pos
+        # Get x and y coordinates as floats
+        x = pos.x() if isinstance(pos, QPoint) else pos[0]
+        y = pos.y() if isinstance(pos, QPoint) else pos[1]
+        # Round to nearest grid point
+        snapped_x = round(x / self.grid_size) * self.grid_size
+        snapped_y = round(y / self.grid_size) * self.grid_size
+        return QPoint(int(snapped_x), int(snapped_y))
+
     def zoom_in(self):
         """Increase zoom level"""
-        new_zoom = min(self.zoom_level * 1.2, self.max_zoom)
+        new_zoom = min(self.zoom_level * self.zoom_increment, self.max_zoom)
         self.set_zoom(new_zoom)
 
     def zoom_out(self):
         """Decrease zoom level"""
-        new_zoom = max(self.zoom_level / 1.2, self.min_zoom)
+        new_zoom = max(self.zoom_level / self.zoom_increment, self.min_zoom)
         self.set_zoom(new_zoom)
 
     def reset_zoom(self):
@@ -179,6 +210,8 @@ class DiagramCanvas(QWidget):
             self.update()
         elif self.dragging_node:
             new_pos = self.screen_to_canvas(event.pos()) - self.drag_offset
+            # Snap to grid if enabled
+            new_pos = self.snap_to_grid_point(new_pos)
             self.dragging_node.pos = new_pos
             self.update()
 
@@ -192,7 +225,9 @@ class DiagramCanvas(QWidget):
     def add_node(self, pos):
         """Add a new node at the given position"""
         self.node_counter += 1
-        node = Node(f"Node{self.node_counter}", pos)
+        snapped_pos = self.snap_to_grid_point(pos)
+        node = Node(f"Node{self.node_counter}", snapped_pos)
+        node.color = self.default_node_color
         self.nodes.append(node)
         self.update()
 
@@ -205,6 +240,7 @@ class DiagramCanvas(QWidget):
                 return
 
         connection = Connection(node1, node2)
+        connection.color = self.default_connection_color
         self.connections.append(connection)
         self.update()
 
@@ -376,16 +412,37 @@ class DiagramCanvas(QWidget):
             node.color = color
         self.update()
 
+    def set_selected_nodes_class(self, class_name):
+        """Set class for all selected nodes"""
+        config = get_config()
+        for node in self.selected_nodes:
+            node.node_class = class_name
+            # Update color based on class
+            color_tuple = config.get_node_class_color(class_name)
+            node.color = QColor(*color_tuple)
+        self.update()
+
     def set_selected_connections_color(self, color):
         """Set color for all selected connections"""
         for connection in self.selected_connections:
             connection.color = color
         self.update()
 
+    def set_default_node_color(self, color):
+        """Set the default color for new nodes"""
+        self.default_node_color = color
+
+    def set_default_connection_color(self, color):
+        """Set the default color for new connections"""
+        self.default_connection_color = color
+
     def paintEvent(self, event):
         """Paint the canvas and all diagram elements"""
+        config = get_config()
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        if config.is_antialiasing_enabled():
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Apply pan transformation
         painter.translate(self.pan_offset)
@@ -408,24 +465,53 @@ class DiagramCanvas(QWidget):
         painter.end()
 
     def draw_grid(self, painter):
-        """Draw a grid on the canvas"""
-        painter.setPen(QPen(QColor(200, 200, 200), 1))
-        width = self.width()
-        height = self.height()
-
-        # Draw vertical lines
-        for x in range(0, width, self.grid_size):
-            painter.drawLine(x, 0, x, height)
-
-        # Draw horizontal lines
-        for y in range(0, height, self.grid_size):
-            painter.drawLine(0, y, width, y)
+        """Draw an infinite grid on the canvas in canvas coordinates"""
+        config = get_config()
+        grid_color = config.get_grid_color()
+        painter.setPen(QPen(QColor(*grid_color), 1))
+        
+        # Get visible area in canvas coordinates
+        # The painter has already been translated and scaled, so we work in canvas space
+        top_left_screen = QPoint(0, 0)
+        bottom_right_screen = QPoint(self.width(), self.height())
+        
+        # Convert to canvas coordinates (accounting for pan and zoom)
+        top_left_canvas = self.screen_to_canvas(top_left_screen)
+        bottom_right_canvas = self.screen_to_canvas(bottom_right_screen)
+        
+        # Find grid boundaries
+        min_x = int(top_left_canvas.x() / self.grid_size) * self.grid_size
+        max_x = int(bottom_right_canvas.x() / self.grid_size) * self.grid_size + self.grid_size
+        min_y = int(top_left_canvas.y() / self.grid_size) * self.grid_size
+        max_y = int(bottom_right_canvas.y() / self.grid_size) * self.grid_size + self.grid_size
+        
+        # Draw vertical lines in canvas coordinates
+        x = min_x
+        while x <= max_x:
+            painter.drawLine(x, int(min_y), x, int(max_y))
+            x += self.grid_size
+        
+        # Draw horizontal lines in canvas coordinates
+        y = min_y
+        while y <= max_y:
+            painter.drawLine(int(min_x), y, int(max_x), y)
+            y += self.grid_size
 
     def export_diagram(self):
         """Export the diagram as a dictionary for saving"""
         diagram_data = {
             "nodes": [],
-            "connections": []
+            "connections": [],
+            "metadata": {
+                "grid_enabled": self.show_grid,
+                "grid_size": self.grid_size,
+                "snap_to_grid": self.snap_to_grid,
+                "zoom_level": self.zoom_level,
+                "pan_offset": {
+                    "x": self.pan_offset.x(),
+                    "y": self.pan_offset.y()
+                }
+            }
         }
 
         # Export nodes
@@ -433,7 +519,13 @@ class DiagramCanvas(QWidget):
             diagram_data["nodes"].append({
                 "name": node.name,
                 "x": node.pos.x(),
-                "y": node.pos.y()
+                "y": node.pos.y(),
+                "class": node.node_class,
+                "color": {
+                    "r": node.color.red(),
+                    "g": node.color.green(),
+                    "b": node.color.blue()
+                }
             })
 
         # Export connections
@@ -443,7 +535,12 @@ class DiagramCanvas(QWidget):
             node2_idx = self.nodes.index(connection.node2)
             diagram_data["connections"].append({
                 "node1": node1_idx,
-                "node2": node2_idx
+                "node2": node2_idx,
+                "color": {
+                    "r": connection.color.red(),
+                    "g": connection.color.green(),
+                    "b": connection.color.blue()
+                }
             })
 
         return diagram_data
@@ -453,6 +550,16 @@ class DiagramCanvas(QWidget):
         try:
             self.clear()
 
+            # Import metadata (grid, zoom, pan settings)
+            metadata = data.get("metadata", {})
+            self.show_grid = metadata.get("grid_enabled", True)
+            self.grid_size = metadata.get("grid_size", 10)
+            self.snap_to_grid = metadata.get("snap_to_grid", False)
+            self.zoom_level = metadata.get("zoom_level", 1.0)
+            
+            pan_data = metadata.get("pan_offset", {"x": 0, "y": 0})
+            self.pan_offset = QPoint(pan_data.get("x", 0), pan_data.get("y", 0))
+
             # Import nodes
             node_map = {}
             for node_data in data.get("nodes", []):
@@ -460,6 +567,19 @@ class DiagramCanvas(QWidget):
                     node_data["name"],
                     QPoint(int(node_data["x"]), int(node_data["y"]))
                 )
+                
+                # Restore class if available
+                if "class" in node_data:
+                    node.node_class = node_data["class"]
+                
+                # Restore color if available in the saved data
+                if "color" in node_data:
+                    node.color = QColor(
+                        node_data["color"]["r"],
+                        node_data["color"]["g"],
+                        node_data["color"]["b"]
+                    )
+                
                 self.nodes.append(node)
                 node_map[len(self.nodes) - 1] = node
                 # Update node counter
@@ -476,6 +596,15 @@ class DiagramCanvas(QWidget):
                 node2_idx = conn_data["node2"]
                 if node1_idx in node_map and node2_idx in node_map:
                     connection = Connection(node_map[node1_idx], node_map[node2_idx])
+                    
+                    # Restore color if available in the saved data
+                    if "color" in conn_data:
+                        connection.color = QColor(
+                            conn_data["color"]["r"],
+                            conn_data["color"]["g"],
+                            conn_data["color"]["b"]
+                        )
+                    
                     self.connections.append(connection)
 
             self.update()
