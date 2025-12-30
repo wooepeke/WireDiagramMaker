@@ -171,7 +171,23 @@ class DiagramCanvas(QWidget):
             if clicked_node:
                 # Toggle selection with Ctrl, otherwise select single node
                 ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                if ctrl_pressed:
+                shift_pressed = event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                
+                # If node is part of a module (locked), always select the entire module
+                if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id:
+                    self.clear_selection()
+                    module_id = clicked_node.module_id
+                    for node in self.nodes:
+                        if hasattr(node, 'module_id') and node.module_id == module_id:
+                            self.select_node(node, multi=True)
+                elif shift_pressed and hasattr(clicked_node, 'module_id'):
+                    # Shift+click selects all nodes in the module
+                    self.clear_selection()
+                    module_id = clicked_node.module_id
+                    for node in self.nodes:
+                        if hasattr(node, 'module_id') and node.module_id == module_id:
+                            self.select_node(node, multi=True)
+                elif ctrl_pressed:
                     if clicked_node in self.selected_nodes:
                         self.deselect_node(clicked_node)
                     else:
@@ -212,7 +228,19 @@ class DiagramCanvas(QWidget):
             new_pos = self.screen_to_canvas(event.pos()) - self.drag_offset
             # Snap to grid if enabled
             new_pos = self.snap_to_grid_point(new_pos)
-            self.dragging_node.pos = new_pos
+            delta = new_pos - self.dragging_node.pos
+            
+            # Check if dragging a module node - if so, move entire module
+            if getattr(self.dragging_node, 'locked', False) and hasattr(self.dragging_node, 'module_id') and self.dragging_node.module_id:
+                # Move all nodes in the same module
+                module_id = self.dragging_node.module_id
+                for node in self.nodes:
+                    if hasattr(node, 'module_id') and node.module_id == module_id:
+                        node.pos = node.pos + delta
+            else:
+                # Move only this node
+                self.dragging_node.pos = new_pos
+            
             self.update()
 
     def mouseReleaseEvent(self, event):
@@ -326,21 +354,42 @@ class DiagramCanvas(QWidget):
 
     def delete_selected(self):
         """Delete all selected nodes and their connections"""
-        # Remove connections involving selected nodes
+        # Check if any selected node is part of a module
+        module_ids_to_delete = set()
+        non_module_nodes = []
+        
+        for node in self.selected_nodes:
+            if getattr(node, 'locked', False) and hasattr(node, 'module_id') and node.module_id:
+                module_ids_to_delete.add(node.module_id)
+            else:
+                non_module_nodes.append(node)
+        
+        # Delete module nodes (entire modules)
+        if module_ids_to_delete:
+            # Find all nodes in the modules to be deleted
+            nodes_to_remove = [
+                node for node in self.nodes 
+                if hasattr(node, 'module_id') and node.module_id in module_ids_to_delete
+            ]
+            for node in nodes_to_remove:
+                if node in self.nodes:
+                    self.nodes.remove(node)
+        
+        # Delete non-module nodes (can be deleted individually)
+        for node in non_module_nodes:
+            if node in self.nodes:
+                self.nodes.remove(node)
+        
+        # Remove connections involving deleted nodes
         self.connections = [
             conn for conn in self.connections
             if conn.node1 not in self.selected_nodes and conn.node2 not in self.selected_nodes
         ]
         
-        # Remove selected connections
+        # Remove selected connections (only if they're not connecting module nodes)
         for conn in self.selected_connections:
             if conn in self.connections:
                 self.connections.remove(conn)
-        
-        # Remove selected nodes
-        for node in self.selected_nodes:
-            if node in self.nodes:
-                self.nodes.remove(node)
         
         self.clear_selection()
 
@@ -463,6 +512,9 @@ class DiagramCanvas(QWidget):
         if self.show_grid:
             self.draw_grid(painter)
 
+        # Draw module bounding boxes
+        self.draw_module_bounding_boxes(painter)
+
         # Draw connections first (so they appear behind nodes)
         for connection in self.connections:
             connection.draw(painter)
@@ -472,6 +524,44 @@ class DiagramCanvas(QWidget):
             node.draw(painter)
 
         painter.end()
+
+    def draw_module_bounding_boxes(self, painter):
+        """Draw bounding boxes around modules to visually group them"""
+        # Group nodes by module_id
+        modules = {}
+        for node in self.nodes:
+            if getattr(node, 'locked', False) and hasattr(node, 'module_id') and node.module_id:
+                if node.module_id not in modules:
+                    modules[node.module_id] = []
+                modules[node.module_id].append(node)
+        
+        # Draw bounding box for each module
+        for module_id, nodes in modules.items():
+            if not nodes:
+                continue
+            
+            # Calculate bounding box
+            min_x = min(node.pos.x() for node in nodes)
+            max_x = max(node.pos.x() for node in nodes)
+            min_y = min(node.pos.y() for node in nodes)
+            max_y = max(node.pos.y() for node in nodes)
+            
+            # Add padding
+            padding = 20
+            rect = QRect(int(min_x - padding), int(min_y - padding), 
+                        int(max_x - min_x + padding * 2), int(max_y - min_y + padding * 2))
+            
+            # Check if any node in this module is selected
+            is_selected = any(node in self.selected_nodes for node in nodes)
+            
+            # Draw bounding box
+            if is_selected:
+                painter.setPen(QPen(QColor(100, 150, 255), 2))
+            else:
+                painter.setPen(QPen(QColor(150, 150, 150), 1))
+            
+            painter.setBrush(QBrush(QColor(200, 220, 255, 20)))  # Semi-transparent fill
+            painter.drawRect(rect)
 
     def draw_grid(self, painter):
         """Draw an infinite grid on the canvas in canvas coordinates"""
@@ -511,6 +601,7 @@ class DiagramCanvas(QWidget):
         diagram_data = {
             "nodes": [],
             "connections": [],
+            "modules": [],
             "metadata": {
                 "grid_enabled": self.show_grid,
                 "grid_size": self.grid_size,
@@ -534,7 +625,9 @@ class DiagramCanvas(QWidget):
                     "r": node.color.red(),
                     "g": node.color.green(),
                     "b": node.color.blue()
-                }
+                },
+                "module_id": getattr(node, 'module_id', None),
+                "locked": getattr(node, 'locked', False)
             })
 
         # Export connections
@@ -588,6 +681,12 @@ class DiagramCanvas(QWidget):
                         node_data["color"]["g"],
                         node_data["color"]["b"]
                     )
+                
+                # Restore module information if available
+                if "module_id" in node_data:
+                    node.module_id = node_data["module_id"]
+                if "locked" in node_data:
+                    node.locked = node_data["locked"]
                 
                 self.nodes.append(node)
                 node_map[len(self.nodes) - 1] = node

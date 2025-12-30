@@ -2,7 +2,7 @@
 Basic diagram elements - nodes and connections
 """
 
-from PyQt5.QtCore import QPoint, QRect, QSize
+from PyQt5.QtCore import QPoint, QRect, QSize, Qt
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from config_loader import get_config
 
@@ -20,6 +20,8 @@ class Node:
         self.pos = pos
         self.highlighted = False
         self.selected = False
+        self.module_id = None  # Track which module this node belongs to
+        self.locked = False  # Locked nodes cannot be dragged (part of a module)
         # Get default class (first one in the list)
         class_names = config.get_node_class_names()
         self.node_class = class_names[0] if class_names else "Generic"
@@ -63,17 +65,30 @@ class Node:
 
         painter.setBrush(QBrush(color))
         
-        # Draw border
+        # Draw border - thicker for locked nodes
         if self.selected:
             border_color = config.get_node_border_color_selected()
             border_width = config.get_node_selected_border_width()
             painter.setPen(QPen(QColor(*border_color), border_width))
+        elif self.locked:
+            # Locked nodes get a dashed border to indicate they're not movable
+            border_color = config.get_node_border_color()
+            border_width = config.get_node_border_width() + 1
+            pen = QPen(QColor(*border_color), border_width)
+            pen.setDashPattern([4, 2])  # Dashed line pattern
+            painter.setPen(pen)
         else:
             border_color = config.get_node_border_color()
             border_width = config.get_node_border_width()
             painter.setPen(QPen(QColor(*border_color), border_width))
         
         painter.drawEllipse(self.pos, self.NODE_RADIUS, self.NODE_RADIUS)
+        
+        # Draw a small lock icon for locked nodes
+        if self.locked:
+            painter.setPen(QPen(QColor(100, 100, 100), 1))
+            painter.setFont(QFont("Arial", 6))
+            painter.drawText(self.rect, Qt.AlignmentFlag.AlignCenter, "🔒")
 
     def get_center(self):
         """Get the center point of the node"""
@@ -147,3 +162,54 @@ class Connection:
         
         painter.drawEllipse(self.node1.get_center(), 4, 4)
         painter.drawEllipse(self.node2.get_center(), 4, 4)
+
+
+class Module:
+    """Represents a reusable module containing a group of nodes"""
+
+    def __init__(self, module_id, name):
+        """Initialize a module"""
+        self.module_id = module_id
+        self.name = name
+        self.nodes = []  # List of Node objects in this module
+
+    def add_node(self, node):
+        """Add a node to this module"""
+        if node not in self.nodes:
+            self.nodes.append(node)
+
+    def remove_node(self, node):
+        """Remove a node from this module"""
+        if node in self.nodes:
+            self.nodes.remove(node)
+
+    def to_dict(self):
+        """Convert module to dictionary for JSON serialization"""
+        nodes_data = []
+        for node in self.nodes:
+            nodes_data.append({
+                "name": node.name,
+                "pos": {"x": node.pos.x(), "y": node.pos.y()},
+                "class": node.node_class,
+                "color": [node.color.red(), node.color.green(), node.color.blue()]
+            })
+        
+        return {
+            "id": self.module_id,
+            "name": self.name,
+            "nodes": nodes_data
+        }
+
+    @staticmethod
+    def from_dict(module_dict):
+        """Create a Module from a dictionary"""
+        module = Module(module_dict["id"], module_dict["name"])
+        
+        for node_data in module_dict.get("nodes", []):
+            node = Node(node_data["name"], QPoint(int(node_data["pos"]["x"]), int(node_data["pos"]["y"])))
+            node.node_class = node_data.get("class", "Generic")
+            color_data = node_data.get("color", [255, 0, 0])
+            node.color = QColor(*color_data)
+            module.add_node(node)
+        
+        return module

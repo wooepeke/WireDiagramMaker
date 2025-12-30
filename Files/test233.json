@@ -1,0 +1,42 @@
+{
+  "nodes": [
+    {
+      "name": "Node1",
+      "x": 265,
+      "y": 321,
+      "class": "5V",
+      "color": {
+        "r": 100,
+        "g": 150,
+        "b": 200
+      },
+      "module_id": "49d247ea",
+      "locked": true
+    },
+    {
+      "name": "Node2",
+      "x": 387,
+      "y": 400,
+      "class": "5V",
+      "color": {
+        "r": 100,
+        "g": 150,
+        "b": 200
+      },
+      "module_id": "49d247ea",
+      "locked": true
+    }
+  ],
+  "connections": [],
+  "modules": [],
+  "metadata": {
+    "grid_enabled": true,
+    "grid_size": 20,
+    "snap_to_grid": false,
+    "zoom_level": 1.0,
+    "pan_offset": {
+      "x": 0,
+      "y": 0
+    }
+  }
+}

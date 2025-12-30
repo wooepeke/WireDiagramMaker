@@ -5,12 +5,15 @@ Wire Diagram Maker - A PyQt5 application for creating wire diagrams
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QToolBar, QStatusBar, QMessageBox, QAction, QMenu
+    QPushButton, QToolBar, QStatusBar, QMessageBox, QAction, QMenu,
+    QInputDialog, QListWidget, QListWidgetItem, QDialog, QLabel
 )
 from PyQt5.QtCore import Qt, QPoint, QSize
 from PyQt5.QtGui import QIcon, QColor, QPainter, QPen, QBrush
 from diagram_canvas import DiagramCanvas
 from file_handler import DiagramFileHandler
+from module_handler import ModuleHandler
+from diagram_elements import Module, Node
 from properties_panel import PropertiesPanel
 
 
@@ -33,6 +36,9 @@ class WireDiagramMaker(QMainWindow):
         # Create file handler
         self.file_handler = DiagramFileHandler(self)
         self.diagram_modified = False
+
+        # Create module handler
+        self.module_handler = ModuleHandler()
 
         # Store tool buttons for styling
         self.tool_buttons = {}
@@ -143,6 +149,16 @@ class WireDiagramMaker(QMainWindow):
         clear_action = QAction("Clear All", self)
         clear_action.triggered.connect(self.on_clear)
         edit_menu.addAction(clear_action)
+
+        edit_menu.addSeparator()
+
+        create_module_action = QAction("Create Module", self)
+        create_module_action.triggered.connect(self.on_create_module)
+        edit_menu.addAction(create_module_action)
+
+        load_module_action = QAction("Load Module", self)
+        load_module_action.triggered.connect(self.on_load_module)
+        edit_menu.addAction(load_module_action)
 
         # View menu
         view_menu = menubar.addMenu("View")
@@ -480,6 +496,110 @@ class WireDiagramMaker(QMainWindow):
             "- Save and load diagrams\n"
             "- Zoom and pan controls",
         )
+
+    def on_create_module(self):
+        """Create a module from selected nodes"""
+        # Get selected nodes
+        selected_nodes = [node for node in self.canvas.nodes if node.selected]
+        
+        if not selected_nodes:
+            QMessageBox.warning(self, "No Selection", "Please select at least one node to create a module.")
+            return
+        
+        # Ask for module name
+        module_name, ok = QInputDialog.getText(
+            self,
+            "Create Module",
+            "Enter module name:"
+        )
+        
+        if not ok or not module_name.strip():
+            return
+        
+        # Generate unique module ID
+        module_id = self.module_handler.generate_module_id()
+        
+        # Create module and add selected nodes
+        module = Module(module_id, module_name)
+        for node in selected_nodes:
+            module.add_node(node)
+        
+        # Save module
+        if self.module_handler.save_module(module):
+            # Mark all nodes in the module with module ID for tracking
+            for node in selected_nodes:
+                node.module_id = module_id
+            
+            self.statusBar().showMessage(f"Module '{module_name}' created successfully!")
+            self.canvas.clear_selection()
+        else:
+            QMessageBox.critical(self, "Error", "Failed to save module.")
+
+    def on_load_module(self):
+        """Load a module onto the canvas"""
+        # Get available modules
+        available_modules = self.module_handler.get_available_modules()
+        
+        if not available_modules:
+            QMessageBox.information(self, "No Modules", "No modules available. Create one first!")
+            return
+        
+        # Create a dialog to select module
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Load Module")
+        dialog.setGeometry(100, 100, 400, 300)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Select a module to load:"))
+        
+        module_list = QListWidget()
+        for module_info in available_modules:
+            item = QListWidgetItem(module_info["name"])
+            item.setData(Qt.UserRole, module_info["id"])
+            module_list.addItem(item)
+        
+        layout.addWidget(module_list)
+        
+        # Add buttons
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("Load")
+        cancel_button = QPushButton("Cancel")
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+        
+        dialog.setLayout(layout)
+        
+        def load_selected():
+            selected_items = module_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, "No Selection", "Please select a module.")
+                return
+            
+            module_id = selected_items[0].data(Qt.UserRole)
+            module = self.module_handler.load_module(module_id)
+            
+            if module:
+                # Add module nodes to canvas
+                for node in module.nodes:
+                    # Create a copy of the node for the canvas
+                    new_node = Node(node.name, QPoint(node.pos.x(), node.pos.y()))
+                    new_node.node_class = node.node_class
+                    new_node.color = node.color
+                    new_node.module_id = module.module_id
+                    new_node.locked = True  # Lock module nodes so they cannot be moved
+                    self.canvas.nodes.append(new_node)
+                
+                self.canvas.update()
+                self.statusBar().showMessage(f"Module '{module.name}' loaded successfully!")
+                dialog.accept()
+            else:
+                QMessageBox.critical(self, "Error", "Failed to load module.")
+        
+        ok_button.clicked.connect(load_selected)
+        cancel_button.clicked.connect(dialog.reject)
+        
+        dialog.exec_()
 
 
 def main():
