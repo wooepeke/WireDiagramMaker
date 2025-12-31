@@ -18,11 +18,13 @@ class PropertiesPanel(QWidget):
     node_color_changed = pyqtSignal(QColor)
     node_class_changed = pyqtSignal(str)  # Emitted when node class changes
     connection_color_changed = pyqtSignal(QColor)
+    image_rotated = pyqtSignal()  # Emitted when image is rotated
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_nodes = []
         self.selected_connections = []
+        self.selected_image = None  # Track selected image for rotation
         self.init_ui()
 
     def init_ui(self):
@@ -48,6 +50,10 @@ class PropertiesPanel(QWidget):
         # Panel 3: Module info panel
         module_panel = self._create_module_panel()
         self.stacked_widget.addWidget(module_panel)
+
+        # Panel 4: Image editor panel
+        image_panel = self._create_image_panel()
+        self.stacked_widget.addWidget(image_panel)
 
         main_layout.addWidget(self.stacked_widget)
         main_layout.addStretch()
@@ -195,6 +201,36 @@ class PropertiesPanel(QWidget):
         panel.setLayout(layout)
         return panel
 
+    def _create_image_panel(self):
+        """Create the image editor panel"""
+        panel = QWidget()
+        layout = QVBoxLayout()
+
+        # Title
+        title = QLabel("Image")
+        title_font = title.font()
+        title_font.setBold(True)
+        title.setFont(title_font)
+        layout.addWidget(title)
+
+        # Rotation controls
+        rotation_label = QLabel("Rotation:")
+        layout.addWidget(rotation_label)
+
+        rotation_layout = QHBoxLayout()
+        self.rotate_ccw_btn = QPushButton("↺ -90°")
+        self.rotate_cw_btn = QPushButton("+90° ↻")
+        self.rotate_ccw_btn.clicked.connect(self.on_rotate_ccw)
+        self.rotate_cw_btn.clicked.connect(self.on_rotate_cw)
+        rotation_layout.addWidget(self.rotate_ccw_btn)
+        rotation_layout.addWidget(self.rotate_cw_btn)
+        rotation_layout.addStretch()
+        layout.addLayout(rotation_layout)
+
+        layout.addStretch()
+        panel.setLayout(layout)
+        return panel
+
     def on_node_color_select(self):
         """Handle node color selection"""
         color = QColorDialog.getColor(self.node_color, self, "Select Node Color")
@@ -254,10 +290,19 @@ class PropertiesPanel(QWidget):
             if not self.selected_nodes and not self.selected_connections:
                 self.stacked_widget.setCurrentIndex(0)
 
-    def set_selected_elements(self, nodes, connections):
+    def set_selected_elements(self, nodes, connections, images=None):
         """Update the panel with selected elements"""
+        if images is None:
+            images = []
+        
         self.selected_nodes = nodes
         self.selected_connections = connections
+        self.selected_image = images[0] if images else None
+
+        # If an image is selected, show the image panel
+        if self.selected_image:
+            self.stacked_widget.setCurrentIndex(4)
+            return
 
         # Check if all selected nodes belong to the same module
         module_id = None
@@ -319,3 +364,15 @@ class PropertiesPanel(QWidget):
             pass
         
         self.module_name_display.setText(module_name)
+
+    def on_rotate_cw(self):
+        """Rotate selected image clockwise by 90 degrees"""
+        if self.selected_image:
+            self.selected_image.rotation = (self.selected_image.rotation + 90) % 360
+            self.image_rotated.emit()
+
+    def on_rotate_ccw(self):
+        """Rotate selected image counter-clockwise by 90 degrees"""
+        if self.selected_image:
+            self.selected_image.rotation = (self.selected_image.rotation - 90) % 360
+            self.image_rotated.emit()

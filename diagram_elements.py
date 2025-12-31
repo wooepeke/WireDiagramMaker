@@ -256,6 +256,7 @@ class Image:
         self.pixmap = None
         self.svg_renderer = None
         self.module_instance_id = None  # Track which module instance this image belongs to
+        self.rotation = 0  # Rotation angle in degrees (0-360)
         
         # Load the image
         self.load_image()
@@ -288,22 +289,78 @@ class Image:
         """Set selection state"""
         self.selected = selected
 
-    def get_resize_handle_at(self, pos, handle_size=8):
+    def get_resize_handle_at(self, pos, handle_size=12):
         """Check if position is on a resize handle. Returns 'tl', 'br', or None"""
-        tl = self.rect.topLeft()
-        br = self.rect.bottomRight()
+        import math
         
-        # Check top-left handle
-        if abs(pos.x() - tl.x()) <= handle_size and abs(pos.y() - tl.y()) <= handle_size:
+        # Get image center
+        center_x = self.pos.x() + self.width / 2
+        center_y = self.pos.y() + self.height / 2
+        
+        # Translate point to center-based coordinates
+        dx = pos.x() - center_x
+        dy = pos.y() - center_y
+        
+        # Rotate point back (negative rotation) to unrotated space
+        angle_rad = math.radians(-self.rotation)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        rotated_dx = dx * cos_a - dy * sin_a
+        rotated_dy = dx * sin_a + dy * cos_a
+        
+        # Check if point is on top-left corner (in unrotated space)
+        if (abs(rotated_dx + self.width / 2) <= handle_size and 
+            abs(rotated_dy + self.height / 2) <= handle_size):
             return 'tl'
-        # Check bottom-right handle
-        if abs(pos.x() - br.x()) <= handle_size and abs(pos.y() - br.y()) <= handle_size:
+        
+        # Check if point is on bottom-right corner (in unrotated space)
+        if (abs(rotated_dx - self.width / 2) <= handle_size and 
+            abs(rotated_dy - self.height / 2) <= handle_size):
             return 'br'
+        
         return None
+
+    def is_point_inside(self, pos):
+        """Check if a point is inside the rotated image bounding box"""
+        import math
+        
+        # Get image center
+        center_x = self.pos.x() + self.width / 2
+        center_y = self.pos.y() + self.height / 2
+        
+        # Translate point to center-based coordinates
+        dx = pos.x() - center_x
+        dy = pos.y() - center_y
+        
+        # Rotate point back (negative rotation) to unrotated space
+        angle_rad = math.radians(-self.rotation)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        rotated_dx = dx * cos_a - dy * sin_a
+        rotated_dy = dx * sin_a + dy * cos_a
+        
+        # Check if point is within unrotated rectangle bounds
+        return (abs(rotated_dx) <= self.width / 2 and 
+                abs(rotated_dy) <= self.height / 2)
 
     def draw(self, painter):
         """Draw the image"""
         self.update_rect()
+        
+        # Save painter state to restore after rotation
+        painter.save()
+        
+        # Calculate center point
+        center_x = self.pos.x() + self.width / 2
+        center_y = self.pos.y() + self.height / 2
+        
+        # Apply rotation if needed
+        if self.rotation != 0:
+            painter.translate(center_x, center_y)
+            painter.rotate(self.rotation)
+            painter.translate(-center_x, -center_y)
         
         # Draw the image
         if self.svg_renderer and self.svg_renderer.isValid():
@@ -317,7 +374,7 @@ class Image:
                 scaled_pixmap = self.pixmap.scaledToHeight(self.height, Qt.SmoothTransformation)
             painter.drawPixmap(self.pos, scaled_pixmap)
         
-        # Draw selection border
+        # Draw selection border (rotated with the image)
         if self.selected:
             painter.setPen(QPen(QColor(200, 0, 0), 3))
             painter.setBrush(QBrush(Qt.NoBrush))
@@ -331,6 +388,9 @@ class Image:
             painter.fillRect(self.rect.bottomRight().x() - handle_size//2, 
                            self.rect.bottomRight().y() - handle_size//2, 
                            handle_size, handle_size, QColor(200, 0, 0))
+        
+        # Restore painter state
+        painter.restore()
 
     def to_dict(self):
         """Convert image to dictionary for JSON serialization"""
@@ -339,7 +399,8 @@ class Image:
             "path": self.image_path,
             "pos": {"x": self.pos.x(), "y": self.pos.y()},
             "width": self.width,
-            "height": self.height
+            "height": self.height,
+            "rotation": self.rotation
         }
 
     @staticmethod
@@ -351,4 +412,5 @@ class Image:
             image_dict.get("width", 100),
             image_dict.get("height", 100)
         )
+        image.rotation = image_dict.get("rotation", 0)
         return image

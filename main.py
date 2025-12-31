@@ -74,6 +74,9 @@ class WireDiagramMaker(QMainWindow):
         self.properties_panel.connection_color_changed.connect(
             self.on_connection_color_changed
         )
+        self.properties_panel.image_rotated.connect(
+            self.on_image_rotated
+        )
         central_layout.addWidget(self.properties_panel, stretch=0)
 
         # Set the central widget
@@ -314,11 +317,17 @@ class WireDiagramMaker(QMainWindow):
         self.canvas.set_selected_connections_color(color)
         self.canvas.set_default_connection_color(color)
 
+    def on_image_rotated(self):
+        """Handle image rotation from properties panel"""
+        self.canvas.update()
+        self.canvas.diagram_modified.emit()
+
     def update_properties_panel(self):
         """Update properties panel with current selection"""
         self.properties_panel.set_selected_elements(
             self.canvas.selected_nodes,
-            self.canvas.selected_connections
+            self.canvas.selected_connections,
+            self.canvas.get_selected_images()
         )
 
     def on_canvas_mode_changed(self, mode):

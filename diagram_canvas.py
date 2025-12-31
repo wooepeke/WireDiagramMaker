@@ -301,6 +301,7 @@ class DiagramCanvas(QWidget):
                             self.resize_start_pos = adjusted_pos
                             self.resize_start_dims = (clicked_image.width, clicked_image.height)
                             self.image_resize_start_dims = (clicked_image.width, clicked_image.height)
+                            self.selection_changed.emit()
                             self.update()
                         else:
                             # Regular click on image - select and prepare to drag
@@ -316,6 +317,7 @@ class DiagramCanvas(QWidget):
                             self.dragging_image = clicked_image
                             self.image_drag_start_pos = clicked_image.pos
                             self.drag_offset = adjusted_pos - clicked_image.pos
+                            self.selection_changed.emit()
                             self.update()
                 else:
                     # Check if a connection is clicked
@@ -508,7 +510,8 @@ class DiagramCanvas(QWidget):
         """Get the image at the given position, if any"""
         # Check images in reverse order (top to bottom)
         for image in reversed(self.images):
-            if image.rect.contains(pos):
+            # Use the image's point-in-rotated-rect check
+            if image.is_point_inside(pos):
                 return image
         return None
 
@@ -568,6 +571,12 @@ class DiagramCanvas(QWidget):
         for image in self.images:
             image.set_selected(False)
         self.selected_nodes.clear()
+        self.selected_connections.clear()
+        self.update()
+
+    def get_selected_images(self):
+        """Get list of selected images"""
+        return [img for img in self.images if img.selected]
         self.selected_connections.clear()
         self.selection_changed.emit()
         self.update()
