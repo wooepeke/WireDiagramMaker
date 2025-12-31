@@ -9,7 +9,7 @@
     "enabled_by_default": true
   },
   "node": {
-    "size": 30,
+    "size": 20,
     "default_color": [
       100,
       150,
@@ -95,7 +95,7 @@
     "increment": 1.2
   },
   "features": {
-    "snap_to_grid_enabled": false,
+    "snap_to_grid_enabled": true,
     "antialiasing_enabled": true
   }
 }

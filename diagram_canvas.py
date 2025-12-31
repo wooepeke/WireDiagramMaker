@@ -5,8 +5,8 @@ Canvas widget for drawing wire diagrams
 from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
-from diagram_elements import Node, Connection
-from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction
+from diagram_elements import Node, Connection, Image
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -31,9 +31,15 @@ class DiagramCanvas(QWidget):
         # Lists to store diagram elements
         self.nodes = []
         self.connections = []
+        self.images = []
 
         # Current operation mode
         self.mode = None
+
+        # For image placement mode
+        self.image_placement_file = None
+        self.image_placement_width = 100
+        self.image_placement_height = 100
 
         # For adding connections
         self.selected_node = None
@@ -41,6 +47,12 @@ class DiagramCanvas(QWidget):
         # For dragging nodes
         self.dragging_node = None
         self.drag_offset = QPoint()
+
+        # For dragging and resizing images
+        self.dragging_image = None
+        self.resizing_image = None
+        self.resize_start_pos = QPoint()
+        self.resize_start_dims = (0, 0)
 
         # Node counter for naming
         self.node_counter = 0
@@ -67,9 +79,12 @@ class DiagramCanvas(QWidget):
         self.undo_stack = []
         self.redo_stack = []
 
-        # Default colors for new elements
+        # Default colors and class for new elements
         default_node_color = config.get_node_default_color()
         self.default_node_color = QColor(*default_node_color)
+        
+        class_names = config.get_node_class_names()
+        self.default_node_class = class_names[0] if class_names else "Generic"
         
         default_connection_color = config.get_connection_default_color()
         self.default_connection_color = QColor(*default_connection_color)
@@ -81,6 +96,17 @@ class DiagramCanvas(QWidget):
         self.clear_selection()  # Deselect any selected nodes when changing tools
         self.setCursor(Qt.CursorShape.CrossCursor if mode in ["add_node", "add_connection"] else Qt.CursorShape.ArrowCursor)
         self.mode_changed.emit(mode)
+
+    def set_image_placement_mode(self, file_path, width, height):
+        """Set image placement mode"""
+        self.mode = "add_image"
+        self.image_placement_file = file_path
+        self.image_placement_width = width
+        self.image_placement_height = height
+        self.selected_node = None
+        self.clear_selection()
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.mode_changed.emit("add_image")
 
     def set_show_grid(self, show):
         """Set whether to show grid"""
@@ -170,6 +196,14 @@ class DiagramCanvas(QWidget):
                     self.selected_node = None
                     self.update()
 
+        elif self.mode == "add_image":
+            # Add image at clicked position
+            adjusted_pos = self.screen_to_canvas(pos)
+            self.add_image(self.image_placement_file, adjusted_pos, self.image_placement_width, self.image_placement_height)
+            # Reset to normal mode after placing image
+            self.set_mode(None)
+            self.tool_deactivated.emit()
+
         else:
             # Check if a node is clicked
             adjusted_pos = self.screen_to_canvas(pos)
@@ -207,21 +241,48 @@ class DiagramCanvas(QWidget):
                 self.dragging_node = clicked_node
                 self.drag_offset = adjusted_pos - clicked_node.pos
             else:
-                # Check if a connection is clicked
-                clicked_connection = self.get_connection_at(adjusted_pos)
-                if clicked_connection:
-                    ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                    if ctrl_pressed:
-                        if clicked_connection in self.selected_connections:
-                            self.deselect_connection(clicked_connection)
-                        else:
-                            self.select_connection(clicked_connection, multi=True)
-                    else:
+                # Check if an image is clicked
+                clicked_image = self.get_image_at(adjusted_pos)
+                if clicked_image:
+                    # Check if clicking on resize handle
+                    resize_handle = clicked_image.get_resize_handle_at(adjusted_pos)
+                    if resize_handle:
                         self.clear_selection()
-                        self.select_connection(clicked_connection)
+                        clicked_image.set_selected(True)
+                        self.resizing_image = clicked_image
+                        self.resize_start_pos = adjusted_pos
+                        self.resize_start_dims = (clicked_image.width, clicked_image.height)
+                        self.update()
+                    else:
+                        # Regular click on image - select and prepare to drag
+                        ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                        if ctrl_pressed:
+                            if clicked_image in [img for img in self.images if img.selected]:
+                                clicked_image.set_selected(False)
+                            else:
+                                clicked_image.set_selected(True)
+                        else:
+                            self.clear_selection()
+                            clicked_image.set_selected(True)
+                        self.dragging_image = clicked_image
+                        self.drag_offset = adjusted_pos - clicked_image.pos
+                        self.update()
                 else:
-                    # Clear selection if clicking on empty space
-                    self.clear_selection()
+                    # Check if a connection is clicked
+                    clicked_connection = self.get_connection_at(adjusted_pos)
+                    if clicked_connection:
+                        ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                        if ctrl_pressed:
+                            if clicked_connection in self.selected_connections:
+                                self.deselect_connection(clicked_connection)
+                            else:
+                                self.select_connection(clicked_connection, multi=True)
+                        else:
+                            self.clear_selection()
+                            self.select_connection(clicked_connection)
+                    else:
+                        # Clear selection if clicking on empty space
+                        self.clear_selection()
 
     def mouseMoveEvent(self, event):
         """Handle mouse move events"""
@@ -230,6 +291,25 @@ class DiagramCanvas(QWidget):
             delta = event.pos() - self.pan_start
             self.pan_offset += delta
             self.pan_start = event.pos()
+            self.update()
+        elif self.resizing_image:
+            # Handle image resizing
+            adjusted_pos = self.screen_to_canvas(event.pos())
+            delta_x = adjusted_pos.x() - self.resize_start_pos.x()
+            delta_y = adjusted_pos.y() - self.resize_start_pos.y()
+            
+            # Update dimensions (minimum 20x20)
+            new_width = max(20, self.resize_start_dims[0] + delta_x)
+            new_height = max(20, self.resize_start_dims[1] + delta_y)
+            
+            self.resizing_image.width = new_width
+            self.resizing_image.height = new_height
+            self.update()
+        elif self.dragging_image:
+            # Handle image dragging
+            adjusted_pos = self.screen_to_canvas(event.pos())
+            new_pos = adjusted_pos - self.drag_offset
+            self.dragging_image.pos = new_pos
             self.update()
         elif self.dragging_node:
             new_pos = self.screen_to_canvas(event.pos()) - self.drag_offset
@@ -255,16 +335,22 @@ class DiagramCanvas(QWidget):
         if self.panning:
             self.panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
-        if self.dragging_node:
+        if self.dragging_node or self.dragging_image or self.resizing_image:
             self.diagram_modified.emit()
         self.dragging_node = None
+        self.dragging_image = None
+        self.resizing_image = None
 
     def add_node(self, pos):
         """Add a new node at the given position"""
         self.node_counter += 1
         snapped_pos = self.snap_to_grid_point(pos)
         node = Node(f"Node{self.node_counter}", snapped_pos)
-        node.color = self.default_node_color
+        node.node_class = self.default_node_class
+        # Get the color for this class
+        config = get_config()
+        color_tuple = config.get_node_class_color(self.default_node_class)
+        node.color = QColor(*color_tuple)
         action = AddNodeAction(self, node)
         self.execute_action(action)
 
@@ -290,6 +376,12 @@ class DiagramCanvas(QWidget):
         action = AddConnectionAction(self, connection)
         self.execute_action(action)
 
+    def add_image(self, image_path, pos, width=100, height=100):
+        """Add an image to the canvas"""
+        image = Image(image_path, pos, width, height)
+        action = AddImageAction(self, image)
+        self.execute_action(action)
+
     def get_node_at(self, pos):
         """Get the node at the given position, if any"""
         for node in self.nodes:
@@ -304,10 +396,19 @@ class DiagramCanvas(QWidget):
                 return connection
         return None
 
+    def get_image_at(self, pos):
+        """Get the image at the given position, if any"""
+        # Check images in reverse order (top to bottom)
+        for image in reversed(self.images):
+            if image.rect.contains(pos):
+                return image
+        return None
+
     def clear(self):
         """Clear all diagram elements"""
         self.nodes.clear()
         self.connections.clear()
+        self.images.clear()
         self.node_counter = 0
         self.selected_node = None
         self.dragging_node = None
@@ -356,6 +457,8 @@ class DiagramCanvas(QWidget):
             node.set_selected(False)
         for connection in self.selected_connections:
             connection.set_selected(False)
+        for image in self.images:
+            image.set_selected(False)
         self.selected_nodes.clear()
         self.selected_connections.clear()
         self.selection_changed.emit()
@@ -363,7 +466,10 @@ class DiagramCanvas(QWidget):
 
     def delete_selected(self):
         """Delete all selected nodes and their connections"""
-        if not self.selected_nodes and not self.selected_connections:
+        # Track if there are any selected images
+        selected_images = [img for img in self.images if img.selected]
+        
+        if not self.selected_nodes and not self.selected_connections and not selected_images:
             return
         
         # Check if any selected node is part of a module
@@ -397,6 +503,12 @@ class DiagramCanvas(QWidget):
         for conn in self.selected_connections:
             if conn in self.connections:
                 action = DeleteConnectionAction(self, conn)
+                self.execute_action(action)
+        
+        # Delete selected images
+        for image in selected_images:
+            if image in self.images:
+                action = DeleteImageAction(self, image)
                 self.execute_action(action)
         
         self.clear_selection()
@@ -501,6 +613,10 @@ class DiagramCanvas(QWidget):
         """Set the default color for new nodes"""
         self.default_node_color = color
 
+    def set_default_node_class(self, class_name):
+        """Set the default class for new nodes"""
+        self.default_node_class = class_name
+
     def set_default_connection_color(self, color):
         """Set the default color for new connections"""
         self.default_connection_color = color
@@ -571,10 +687,14 @@ class DiagramCanvas(QWidget):
         if self.show_grid:
             self.draw_grid(painter)
 
+        # Draw images first (as background)
+        for image in self.images:
+            image.draw(painter)
+
         # Draw module bounding boxes
         self.draw_module_bounding_boxes(painter)
 
-        # Draw connections first (so they appear behind nodes)
+        # Draw connections (so they appear behind nodes)
         for connection in self.connections:
             connection.draw(painter)
 
@@ -660,6 +780,7 @@ class DiagramCanvas(QWidget):
         diagram_data = {
             "nodes": [],
             "connections": [],
+            "images": [],
             "modules": [],
             "metadata": {
                 "grid_enabled": self.show_grid,
@@ -703,6 +824,10 @@ class DiagramCanvas(QWidget):
                     "b": connection.color.blue()
                 }
             })
+
+        # Export images
+        for image in self.images:
+            diagram_data["images"].append(image.to_dict())
 
         return diagram_data
 
@@ -773,6 +898,11 @@ class DiagramCanvas(QWidget):
                         )
                     
                     self.connections.append(connection)
+
+            # Import images
+            for image_data in data.get("images", []):
+                image = Image.from_dict(image_data)
+                self.images.append(image)
 
             self.update()
             return True

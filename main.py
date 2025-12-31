@@ -6,7 +6,7 @@ import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QToolBar, QStatusBar, QMessageBox, QAction, QMenu,
-    QInputDialog, QListWidget, QListWidgetItem, QDialog, QLabel
+    QInputDialog, QListWidget, QListWidgetItem, QDialog, QLabel, QFileDialog
 )
 from PyQt5.QtCore import Qt, QPoint, QSize
 from PyQt5.QtGui import QIcon, QColor, QPainter, QPen, QBrush
@@ -155,6 +155,12 @@ class WireDiagramMaker(QMainWindow):
 
         edit_menu.addSeparator()
 
+        add_image_action = QAction("Add Image", self)
+        add_image_action.triggered.connect(self.on_add_image)
+        edit_menu.addAction(add_image_action)
+
+        edit_menu.addSeparator()
+
         create_module_action = QAction("Create Module", self)
         create_module_action.triggered.connect(self.on_create_module)
         edit_menu.addAction(create_module_action)
@@ -298,6 +304,7 @@ class WireDiagramMaker(QMainWindow):
     def on_node_class_changed(self, class_name):
         """Handle node class change from properties panel"""
         self.canvas.set_selected_nodes_class(class_name)
+        self.canvas.set_default_node_class(class_name)
 
     def on_connection_color_changed(self, color):
         """Handle connection color change from properties panel"""
@@ -366,11 +373,26 @@ class WireDiagramMaker(QMainWindow):
 
     def on_delete(self):
         """Delete selected elements"""
-        if self.canvas.selected_nodes or self.canvas.selected_connections:
+        if self.canvas.selected_nodes or self.canvas.selected_connections or self.canvas.images:
             self.canvas.delete_selected()
             self.statusBar().showMessage("Selected elements deleted")
         else:
             self.statusBar().showMessage("No elements selected")
+
+    def on_add_image(self):
+        """Open file dialog to add an image"""
+        # Open file dialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Image File",
+            "./Images",
+            "PNG Files (*.png);;All Image Files (*.svg *.png);;SVG Files (*.svg);;All Files (*)"
+        )
+        
+        if file_path:
+            # Set canvas to image placement mode with default dimensions (100x100)
+            self.canvas.set_image_placement_mode(file_path, 100, 100)
+            self.statusBar().showMessage("Click on canvas to place image")
 
     def on_clear(self):
         """Clear all diagram elements"""

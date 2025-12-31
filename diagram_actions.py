@@ -214,3 +214,95 @@ class ChangeConnectionColorAction(Action):
 
     def get_description(self):
         return f"Change connection color"
+
+
+class AddImageAction(Action):
+    """Action for adding an image"""
+
+    def __init__(self, canvas, image):
+        self.canvas = canvas
+        self.image = image
+
+    def execute(self):
+        """Add the image to the canvas"""
+        if self.image not in self.canvas.images:
+            self.canvas.images.append(self.image)
+
+    def undo(self):
+        """Remove the image from the canvas"""
+        if self.image in self.canvas.images:
+            self.canvas.images.remove(self.image)
+
+    def get_description(self):
+        return f"Add image"
+
+
+class DeleteImageAction(Action):
+    """Action for deleting an image"""
+
+    def __init__(self, canvas, image):
+        self.canvas = canvas
+        self.image = image
+
+    def execute(self):
+        """Remove the image"""
+        if self.image in self.canvas.images:
+            self.canvas.images.remove(self.image)
+
+    def undo(self):
+        """Restore the image"""
+        if self.image not in self.canvas.images:
+            self.canvas.images.append(self.image)
+
+    def get_description(self):
+        return f"Delete image"
+
+
+class MoveImageAction(Action):
+    """Action for moving an image"""
+
+    def __init__(self, canvas, image, old_pos, new_pos):
+        self.canvas = canvas
+        self.image = image
+        self.old_pos = QPoint(old_pos)
+        self.new_pos = QPoint(new_pos)
+
+    def execute(self):
+        """Move the image to the new position"""
+        self.image.pos = QPoint(self.new_pos)
+        self.image.update_rect()
+
+    def undo(self):
+        """Move the image back to the old position"""
+        self.image.pos = QPoint(self.old_pos)
+        self.image.update_rect()
+
+    def get_description(self):
+        return f"Move image"
+
+
+class ResizeImageAction(Action):
+    """Action for resizing an image"""
+
+    def __init__(self, canvas, image, old_width, old_height, new_width, new_height):
+        self.canvas = canvas
+        self.image = image
+        self.old_width = old_width
+        self.old_height = old_height
+        self.new_width = new_width
+        self.new_height = new_height
+
+    def execute(self):
+        """Resize the image"""
+        self.image.width = self.new_width
+        self.image.height = self.new_height
+        self.image.update_rect()
+
+    def undo(self):
+        """Restore the old size"""
+        self.image.width = self.old_width
+        self.image.height = self.old_height
+        self.image.update_rect()
+
+    def get_description(self):
+        return f"Resize image"

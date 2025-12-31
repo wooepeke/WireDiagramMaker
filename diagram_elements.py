@@ -2,8 +2,9 @@
 Basic diagram elements - nodes and connections
 """
 
-from PyQt5.QtCore import QPoint, QRect, QSize, Qt
-from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
+from PyQt5.QtCore import QPoint, QRect, QRectF, QSize, Qt
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPixmap
+from PyQt5.QtSvg import QSvgRenderer
 from config_loader import get_config
 
 
@@ -86,12 +87,6 @@ class Node:
             painter.setPen(QPen(QColor(*border_color), border_width))
         
         painter.drawEllipse(self.pos, self.NODE_RADIUS, self.NODE_RADIUS)
-        
-        # Draw a small lock icon for locked nodes
-        if self.locked:
-            painter.setPen(QPen(QColor(100, 100, 100), 1))
-            painter.setFont(QFont("Arial", 6))
-            painter.drawText(self.rect, Qt.AlignmentFlag.AlignCenter, "🔒")
 
     def get_center(self):
         """Get the center point of the node"""
@@ -217,3 +212,113 @@ class Module:
             module.add_node(node)
         
         return module
+
+
+class Image:
+    """Represents an image on the canvas"""
+
+    def __init__(self, image_path, pos, width=100, height=100):
+        """Initialize an image"""
+        self.image_path = image_path
+        self.pos = pos
+        self.width = width
+        self.height = height
+        self.selected = False
+        self.pixmap = None
+        self.svg_renderer = None
+        
+        # Load the image
+        self.load_image()
+        self.update_rect()
+
+    def load_image(self):
+        """Load the image from file"""
+        try:
+            if self.image_path.lower().endswith('.svg'):
+                # Handle SVG images
+                self.svg_renderer = QSvgRenderer(self.image_path)
+            else:
+                # Handle PNG and other formats
+                self.pixmap = QPixmap(self.image_path)
+                if self.pixmap.isNull():
+                    print(f"Failed to load image: {self.image_path}")
+        except Exception as e:
+            print(f"Error loading image {self.image_path}: {e}")
+
+    def update_rect(self):
+        """Update the bounding rectangle of the image"""
+        self.rect = QRect(
+            int(self.pos.x()),
+            int(self.pos.y()),
+            self.width,
+            self.height
+        )
+
+    def set_selected(self, selected):
+        """Set selection state"""
+        self.selected = selected
+
+    def get_resize_handle_at(self, pos, handle_size=8):
+        """Check if position is on a resize handle. Returns 'tl', 'br', or None"""
+        tl = self.rect.topLeft()
+        br = self.rect.bottomRight()
+        
+        # Check top-left handle
+        if abs(pos.x() - tl.x()) <= handle_size and abs(pos.y() - tl.y()) <= handle_size:
+            return 'tl'
+        # Check bottom-right handle
+        if abs(pos.x() - br.x()) <= handle_size and abs(pos.y() - br.y()) <= handle_size:
+            return 'br'
+        return None
+
+    def draw(self, painter):
+        """Draw the image"""
+        self.update_rect()
+        
+        # Draw the image
+        if self.svg_renderer and self.svg_renderer.isValid():
+            rect_f = QRectF(self.rect)
+            self.svg_renderer.render(painter, rect_f)
+        elif self.pixmap:
+            # Scale pixmap to fit within the specified width and height while maintaining aspect ratio
+            scaled_pixmap = self.pixmap.scaledToWidth(self.width, Qt.SmoothTransformation)
+            # If scaled height exceeds desired height, scale by height instead
+            if scaled_pixmap.height() > self.height:
+                scaled_pixmap = self.pixmap.scaledToHeight(self.height, Qt.SmoothTransformation)
+            painter.drawPixmap(self.pos, scaled_pixmap)
+        
+        # Draw selection border
+        if self.selected:
+            painter.setPen(QPen(QColor(200, 0, 0), 3))
+            painter.setBrush(QBrush(Qt.NoBrush))
+            painter.drawRect(self.rect)
+            
+            # Draw resize handles
+            handle_size = 8
+            painter.fillRect(self.rect.topLeft().x() - handle_size//2, 
+                           self.rect.topLeft().y() - handle_size//2, 
+                           handle_size, handle_size, QColor(200, 0, 0))
+            painter.fillRect(self.rect.bottomRight().x() - handle_size//2, 
+                           self.rect.bottomRight().y() - handle_size//2, 
+                           handle_size, handle_size, QColor(200, 0, 0))
+
+    def to_dict(self):
+        """Convert image to dictionary for JSON serialization"""
+        return {
+            "type": "image",
+            "path": self.image_path,
+            "pos": {"x": self.pos.x(), "y": self.pos.y()},
+            "width": self.width,
+            "height": self.height
+        }
+
+    @staticmethod
+    def from_dict(image_dict):
+        """Create an Image from a dictionary"""
+        image = Image(
+            image_dict["path"],
+            QPoint(int(image_dict["pos"]["x"]), int(image_dict["pos"]["y"])),
+            image_dict.get("width", 100),
+            image_dict.get("height", 100)
+        )
+        return image
