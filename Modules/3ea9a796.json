@@ -1,0 +1,121 @@
+{
+    "id": "3ea9a796",
+    "name": "MPU6050",
+    "nodes": [
+        {
+            "name": "Node1",
+            "pos": {
+                "x": 620,
+                "y": 260
+            },
+            "class": "5V",
+            "color": [
+                255,
+                51,
+                51
+            ]
+        },
+        {
+            "name": "Node13",
+            "pos": {
+                "x": 620,
+                "y": 280
+            },
+            "class": "GRD",
+            "color": [
+                0,
+                0,
+                0
+            ]
+        },
+        {
+            "name": "Node14",
+            "pos": {
+                "x": 620,
+                "y": 300
+            },
+            "class": "SCL",
+            "color": [
+                51,
+                204,
+                51
+            ]
+        },
+        {
+            "name": "Node16",
+            "pos": {
+                "x": 620,
+                "y": 320
+            },
+            "class": "SDA",
+            "color": [
+                51,
+                102,
+                255
+            ]
+        },
+        {
+            "name": "Node21",
+            "pos": {
+                "x": 620,
+                "y": 340
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node22",
+            "pos": {
+                "x": 620,
+                "y": 360
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node23",
+            "pos": {
+                "x": 620,
+                "y": 380
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node24",
+            "pos": {
+                "x": 620,
+                "y": 400
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        }
+    ],
+    "images": [
+        {
+            "path": "C:/Users/xavie/TuDelft/Master Robotics/Thesis/SoftRobotics/WireDiagramMaker/Images/MPU6050.png",
+            "pos": {
+                "x": 611,
+                "y": 249
+            },
+            "width": 137,
+            "height": 163
+        }
+    ]
+}

@@ -64,8 +64,14 @@ class Node:
         # Always use the node's actual color for the fill
         painter.setBrush(QBrush(self.color))
         
+        # Don't draw border for locked (module) nodes
+        if self.locked:
+            # Set pen style to NoPen for locked nodes
+            pen = QPen()
+            pen.setStyle(Qt.PenStyle.NoPen)
+            painter.setPen(pen)
         # Draw border based on state
-        if self.selected:
+        elif self.selected:
             border_color = config.get_node_border_color_selected()
             border_width = config.get_node_selected_border_width()
             painter.setPen(QPen(QColor(*border_color), border_width))
@@ -74,13 +80,6 @@ class Node:
             border_color = config.get_node_border_color_selected()
             border_width = config.get_node_selected_border_width()
             painter.setPen(QPen(QColor(*border_color), border_width))
-        elif self.locked:
-            # Locked nodes get a dashed border to indicate they're not movable
-            border_color = config.get_node_border_color()
-            border_width = config.get_node_border_width() + 1
-            pen = QPen(QColor(*border_color), border_width)
-            pen.setDashPattern([4, 2])  # Dashed line pattern
-            painter.setPen(pen)
         else:
             border_color = config.get_node_border_color()
             border_width = config.get_node_border_width()
@@ -164,13 +163,14 @@ class Connection:
 
 
 class Module:
-    """Represents a reusable module containing a group of nodes"""
+    """Represents a reusable module containing a group of nodes and images"""
 
     def __init__(self, module_id, name):
         """Initialize a module"""
         self.module_id = module_id
         self.name = name
         self.nodes = []  # List of Node objects in this module
+        self.images = []  # List of Image objects in this module
 
     def add_node(self, node):
         """Add a node to this module"""
@@ -181,6 +181,16 @@ class Module:
         """Remove a node from this module"""
         if node in self.nodes:
             self.nodes.remove(node)
+
+    def add_image(self, image):
+        """Add an image to this module"""
+        if image not in self.images:
+            self.images.append(image)
+
+    def remove_image(self, image):
+        """Remove an image from this module"""
+        if image in self.images:
+            self.images.remove(image)
 
     def to_dict(self):
         """Convert module to dictionary for JSON serialization"""
@@ -193,10 +203,20 @@ class Module:
                 "color": [node.color.red(), node.color.green(), node.color.blue()]
             })
         
+        images_data = []
+        for image in self.images:
+            images_data.append({
+                "path": image.image_path,
+                "pos": {"x": image.pos.x(), "y": image.pos.y()},
+                "width": image.width,
+                "height": image.height
+            })
+        
         return {
             "id": self.module_id,
             "name": self.name,
-            "nodes": nodes_data
+            "nodes": nodes_data,
+            "images": images_data
         }
 
     @staticmethod
@@ -210,6 +230,15 @@ class Module:
             color_data = node_data.get("color", [255, 0, 0])
             node.color = QColor(*color_data)
             module.add_node(node)
+        
+        for image_data in module_dict.get("images", []):
+            image = Image(
+                image_data["path"],
+                QPoint(int(image_data["pos"]["x"]), int(image_data["pos"]["y"])),
+                image_data.get("width", 100),
+                image_data.get("height", 100)
+            )
+            module.add_image(image)
         
         return module
 
@@ -226,6 +255,7 @@ class Image:
         self.selected = False
         self.pixmap = None
         self.svg_renderer = None
+        self.module_instance_id = None  # Track which module instance this image belongs to
         
         # Load the image
         self.load_image()

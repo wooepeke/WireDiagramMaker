@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QToolBar, QStatusBar, QMessageBox, QAction, QMenu,
     QInputDialog, QListWidget, QListWidgetItem, QDialog, QLabel, QFileDialog
 )
-from PyQt5.QtCore import Qt, QPoint, QSize
+from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 from PyQt5.QtGui import QIcon, QColor, QPainter, QPen, QBrush
 from diagram_canvas import DiagramCanvas
 from file_handler import DiagramFileHandler
@@ -25,7 +25,10 @@ class WireDiagramMaker(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wire Diagram Maker")
-        self.setGeometry(100, 100, 1200, 800)
+        
+        # Get screen geometry and set window to screen size
+        screen_geometry = QApplication.primaryScreen().geometry()
+        self.setGeometry(screen_geometry)
 
         # Create the main canvas
         self.canvas = DiagramCanvas()
@@ -641,6 +644,23 @@ class WireDiagramMaker(QMainWindow):
                     new_node.module_id = unique_instance_id  # Each instance gets a unique ID!
                     new_node.locked = True
                     self.canvas.nodes.append(new_node)
+                
+                # Add module images to canvas - create completely independent copies
+                for image in module.images:
+                    from diagram_elements import Image
+                    # Create a completely new, independent image object
+                    new_image = Image(
+                        image.image_path,
+                        QPoint(
+                            int(image.pos.x() + offset_x),
+                            int(image.pos.y() + offset_y)
+                        ),
+                        image.width,
+                        image.height
+                    )
+                    # Tag the image with the module instance ID so it moves with the module
+                    new_image.module_instance_id = unique_instance_id
+                    self.canvas.images.append(new_image)
                 
                 self.canvas.update()
                 self.statusBar().showMessage(f"Module '{module.name}' (instance {instance_number}) loaded successfully!")

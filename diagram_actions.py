@@ -306,3 +306,70 @@ class ResizeImageAction(Action):
 
     def get_description(self):
         return f"Resize image"
+
+
+class CreateModuleAction(Action):
+    """Action for creating a module from selected nodes and images"""
+
+    def __init__(self, canvas, nodes, images, module_id):
+        self.canvas = canvas
+        self.nodes = nodes
+        self.images = images
+        self.module_id = module_id
+        # Store original state
+        self.original_locked = {node: getattr(node, 'locked', False) for node in nodes}
+        self.original_module_ids = {node: getattr(node, 'module_id', None) for node in nodes}
+        self.image_module_ids = {image: getattr(image, 'module_instance_id', None) for image in images}
+
+    def execute(self):
+        """Lock nodes and images as part of the module"""
+        for node in self.nodes:
+            node.locked = True
+            node.module_id = self.module_id
+        for image in self.images:
+            image.module_instance_id = self.module_id
+
+    def undo(self):
+        """Unlock nodes and images, restoring their original state"""
+        for node in self.nodes:
+            node.locked = self.original_locked[node]
+            node.module_id = self.original_module_ids[node]
+        for image in self.images:
+            image.module_instance_id = self.image_module_ids[image]
+
+    def get_description(self):
+        return f"Create module"
+
+    def get_description(self):
+        return f"Create module"
+
+
+class MoveModuleAction(Action):
+    """Action for moving an entire module (all nodes and images together)"""
+
+    def __init__(self, canvas, module_id, nodes, images, old_positions, new_positions):
+        self.canvas = canvas
+        self.module_id = module_id
+        self.nodes = nodes
+        self.images = images
+        self.old_node_positions = old_positions["nodes"]  # Dict: node -> QPoint
+        self.new_node_positions = new_positions["nodes"]
+        self.old_image_positions = old_positions["images"]  # Dict: image -> QPoint
+        self.new_image_positions = new_positions["images"]
+
+    def execute(self):
+        """Move all nodes and images to their new positions"""
+        for node, pos in self.new_node_positions.items():
+            node.pos = pos
+        for image, pos in self.new_image_positions.items():
+            image.pos = pos
+
+    def undo(self):
+        """Restore all nodes and images to their old positions"""
+        for node, pos in self.old_node_positions.items():
+            node.pos = pos
+        for image, pos in self.old_image_positions.items():
+            image.pos = pos
+
+    def get_description(self):
+        return f"Move module"

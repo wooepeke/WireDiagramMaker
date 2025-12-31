@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection, Image
-from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -53,6 +53,13 @@ class DiagramCanvas(QWidget):
         self.resizing_image = None
         self.resize_start_pos = QPoint()
         self.resize_start_dims = (0, 0)
+        self.image_drag_start_pos = QPoint()  # Track initial position for move action
+        self.image_resize_start_dims = (0, 0)  # Track initial dimensions for resize action
+        
+        # For tracking module movement
+        self.dragging_module = None
+        self.module_drag_start_positions = {}  # {node: start_pos, ...}
+        self.module_drag_start_image_positions = {}  # {image: start_pos, ...}
 
         # Node counter for naming
         self.node_counter = 0
@@ -240,33 +247,76 @@ class DiagramCanvas(QWidget):
                 # Start dragging
                 self.dragging_node = clicked_node
                 self.drag_offset = adjusted_pos - clicked_node.pos
+                
+                # If dragging a module node, track all module positions for undo/redo
+                if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id:
+                    module_id = clicked_node.module_id
+                    self.dragging_module = module_id
+                    # Store initial positions of all module nodes and images
+                    self.module_drag_start_positions = {}
+                    for node in self.nodes:
+                        if hasattr(node, 'module_id') and node.module_id == module_id:
+                            self.module_drag_start_positions[node] = QPoint(node.pos)
+                    self.module_drag_start_image_positions = {}
+                    for image in self.images:
+                        if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
+                            self.module_drag_start_image_positions[image] = QPoint(image.pos)
             else:
                 # Check if an image is clicked
                 clicked_image = self.get_image_at(adjusted_pos)
                 if clicked_image:
-                    # Check if clicking on resize handle
-                    resize_handle = clicked_image.get_resize_handle_at(adjusted_pos)
-                    if resize_handle:
-                        self.clear_selection()
-                        clicked_image.set_selected(True)
-                        self.resizing_image = clicked_image
-                        self.resize_start_pos = adjusted_pos
-                        self.resize_start_dims = (clicked_image.width, clicked_image.height)
-                        self.update()
+                    # Check if image is part of a module - if so, select/drag the entire module
+                    if hasattr(clicked_image, 'module_instance_id') and clicked_image.module_instance_id:
+                        # Find and select all nodes in this module instance
+                        module_id = clicked_image.module_instance_id
+                        module_nodes = [n for n in self.nodes if hasattr(n, 'module_id') and n.module_id == module_id]
+                        
+                        if module_nodes:
+                            # Clear and select all module nodes
+                            self.clear_selection()
+                            for node in module_nodes:
+                                self.select_node(node, multi=True)
+                            # Start dragging from the first node
+                            self.dragging_node = module_nodes[0]
+                            self.drag_offset = adjusted_pos - self.dragging_node.pos
+                            
+                            # Track module movement
+                            self.dragging_module = module_id
+                            self.module_drag_start_positions = {}
+                            for node in self.nodes:
+                                if hasattr(node, 'module_id') and node.module_id == module_id:
+                                    self.module_drag_start_positions[node] = QPoint(node.pos)
+                            self.module_drag_start_image_positions = {}
+                            for image in self.images:
+                                if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
+                                    self.module_drag_start_image_positions[image] = QPoint(image.pos)
                     else:
-                        # Regular click on image - select and prepare to drag
-                        ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                        if ctrl_pressed:
-                            if clicked_image in [img for img in self.images if img.selected]:
-                                clicked_image.set_selected(False)
-                            else:
-                                clicked_image.set_selected(True)
-                        else:
+                        # Regular image not part of a module - can be dragged independently
+                        # Check if clicking on resize handle
+                        resize_handle = clicked_image.get_resize_handle_at(adjusted_pos)
+                        if resize_handle:
                             self.clear_selection()
                             clicked_image.set_selected(True)
-                        self.dragging_image = clicked_image
-                        self.drag_offset = adjusted_pos - clicked_image.pos
-                        self.update()
+                            self.resizing_image = clicked_image
+                            self.resize_start_pos = adjusted_pos
+                            self.resize_start_dims = (clicked_image.width, clicked_image.height)
+                            self.image_resize_start_dims = (clicked_image.width, clicked_image.height)
+                            self.update()
+                        else:
+                            # Regular click on image - select and prepare to drag
+                            ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                            if ctrl_pressed:
+                                if clicked_image in [img for img in self.images if img.selected]:
+                                    clicked_image.set_selected(False)
+                                else:
+                                    clicked_image.set_selected(True)
+                            else:
+                                self.clear_selection()
+                                clicked_image.set_selected(True)
+                            self.dragging_image = clicked_image
+                            self.image_drag_start_pos = clicked_image.pos
+                            self.drag_offset = adjusted_pos - clicked_image.pos
+                            self.update()
                 else:
                     # Check if a connection is clicked
                     clicked_connection = self.get_connection_at(adjusted_pos)
@@ -293,24 +343,26 @@ class DiagramCanvas(QWidget):
             self.pan_start = event.pos()
             self.update()
         elif self.resizing_image:
-            # Handle image resizing
-            adjusted_pos = self.screen_to_canvas(event.pos())
-            delta_x = adjusted_pos.x() - self.resize_start_pos.x()
-            delta_y = adjusted_pos.y() - self.resize_start_pos.y()
-            
-            # Update dimensions (minimum 20x20)
-            new_width = max(20, self.resize_start_dims[0] + delta_x)
-            new_height = max(20, self.resize_start_dims[1] + delta_y)
-            
-            self.resizing_image.width = new_width
-            self.resizing_image.height = new_height
-            self.update()
+            # Handle image resizing - only for images NOT part of a module
+            if not (hasattr(self.resizing_image, 'module_instance_id') and self.resizing_image.module_instance_id):
+                adjusted_pos = self.screen_to_canvas(event.pos())
+                delta_x = adjusted_pos.x() - self.resize_start_pos.x()
+                delta_y = adjusted_pos.y() - self.resize_start_pos.y()
+                
+                # Update dimensions (minimum 20x20)
+                new_width = max(20, self.resize_start_dims[0] + delta_x)
+                new_height = max(20, self.resize_start_dims[1] + delta_y)
+                
+                self.resizing_image.width = new_width
+                self.resizing_image.height = new_height
+                self.update()
         elif self.dragging_image:
-            # Handle image dragging
-            adjusted_pos = self.screen_to_canvas(event.pos())
-            new_pos = adjusted_pos - self.drag_offset
-            self.dragging_image.pos = new_pos
-            self.update()
+            # Handle image dragging - only for images NOT part of a module
+            if not (hasattr(self.dragging_image, 'module_instance_id') and self.dragging_image.module_instance_id):
+                adjusted_pos = self.screen_to_canvas(event.pos())
+                new_pos = adjusted_pos - self.drag_offset
+                self.dragging_image.pos = new_pos
+                self.update()
         elif self.dragging_node:
             new_pos = self.screen_to_canvas(event.pos()) - self.drag_offset
             # Snap to grid if enabled
@@ -324,6 +376,11 @@ class DiagramCanvas(QWidget):
                 for node in self.nodes:
                     if hasattr(node, 'module_id') and node.module_id == module_id:
                         node.pos = node.pos + delta
+                
+                # Also move all images in the same module instance
+                for image in self.images:
+                    if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
+                        image.pos = image.pos + delta
             else:
                 # Move only this node
                 self.dragging_node.pos = new_pos
@@ -335,11 +392,62 @@ class DiagramCanvas(QWidget):
         if self.panning:
             self.panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
+        
+        # Create action for image resize if it changed
+        if self.resizing_image and (self.resizing_image.width != self.image_resize_start_dims[0] or 
+                                     self.resizing_image.height != self.image_resize_start_dims[1]):
+            action = ResizeImageAction(self, self.resizing_image, 
+                                     self.image_resize_start_dims[0], 
+                                     self.image_resize_start_dims[1],
+                                     self.resizing_image.width, 
+                                     self.resizing_image.height)
+            self.execute_action(action)
+        
+        # Create action for image move if it changed
+        if self.dragging_image and self.dragging_image.pos != self.image_drag_start_pos:
+            action = MoveImageAction(self, self.dragging_image, 
+                                    self.image_drag_start_pos, 
+                                    self.dragging_image.pos)
+            self.execute_action(action)
+        
+        # Create action for module move if it changed
+        if self.dragging_module and self.module_drag_start_positions:
+            # Check if any node or image in the module moved
+            moved = False
+            for node, start_pos in self.module_drag_start_positions.items():
+                if node.pos != start_pos:
+                    moved = True
+                    break
+            if not moved:
+                for image, start_pos in self.module_drag_start_image_positions.items():
+                    if image.pos != start_pos:
+                        moved = True
+                        break
+            
+            if moved:
+                # Get current positions
+                new_node_positions = {node: QPoint(node.pos) for node in self.module_drag_start_positions.keys()}
+                new_image_positions = {image: QPoint(image.pos) for image in self.module_drag_start_image_positions.keys()}
+                
+                action = MoveModuleAction(
+                    self, 
+                    self.dragging_module,
+                    list(self.module_drag_start_positions.keys()),
+                    list(self.module_drag_start_image_positions.keys()),
+                    {"nodes": self.module_drag_start_positions, "images": self.module_drag_start_image_positions},
+                    {"nodes": new_node_positions, "images": new_image_positions}
+                )
+                self.execute_action(action)
+        
         if self.dragging_node or self.dragging_image or self.resizing_image:
             self.diagram_modified.emit()
+        
         self.dragging_node = None
         self.dragging_image = None
         self.resizing_image = None
+        self.dragging_module = None
+        self.module_drag_start_positions = {}
+        self.module_drag_start_image_positions = {}
 
     def add_node(self, pos):
         """Add a new node at the given position"""
@@ -377,10 +485,10 @@ class DiagramCanvas(QWidget):
         self.execute_action(action)
 
     def add_image(self, image_path, pos, width=100, height=100):
-        """Add an image to the canvas"""
+        """Add an image to the canvas (not undoable)"""
         image = Image(image_path, pos, width, height)
-        action = AddImageAction(self, image)
-        self.execute_action(action)
+        self.images.append(image)
+        self.diagram_modified.emit()
 
     def get_node_at(self, pos):
         """Get the node at the given position, if any"""
@@ -486,12 +594,13 @@ class DiagramCanvas(QWidget):
         nodes_to_delete = list(non_module_nodes)
         
         # Find all nodes in the modules to be deleted
+        module_nodes_list = []
         if module_ids_to_delete:
-            module_nodes = [
+            module_nodes_list = [
                 node for node in self.nodes 
                 if hasattr(node, 'module_id') and node.module_id in module_ids_to_delete
             ]
-            nodes_to_delete.extend(module_nodes)
+            nodes_to_delete.extend(module_nodes_list)
         
         # Create delete actions for nodes and connections
         for node in nodes_to_delete:
@@ -505,11 +614,31 @@ class DiagramCanvas(QWidget):
                 action = DeleteConnectionAction(self, conn)
                 self.execute_action(action)
         
-        # Delete selected images
+        # Delete selected images that are NOT part of a module
         for image in selected_images:
-            if image in self.images:
+            if image in self.images and not (hasattr(image, 'module_instance_id') and image.module_instance_id):
                 action = DeleteImageAction(self, image)
                 self.execute_action(action)
+        
+        # Delete modules directly (not undoable)
+        if module_ids_to_delete:
+            module_images = [
+                img for img in self.images
+                if hasattr(img, 'module_instance_id') and img.module_instance_id in module_ids_to_delete
+            ]
+            # Delete all module nodes
+            for node in module_nodes_list:
+                if node in self.nodes:
+                    self.nodes.remove(node)
+            # Delete all connections involving module nodes
+            self.connections = [
+                conn for conn in self.connections
+                if not any(node in module_nodes_list for node in [conn.node1, conn.node2])
+            ]
+            # Delete all module images
+            for image in module_images:
+                if image in self.images:
+                    self.images.remove(image)
         
         self.clear_selection()
 
@@ -694,13 +823,13 @@ class DiagramCanvas(QWidget):
         # Draw module bounding boxes
         self.draw_module_bounding_boxes(painter)
 
-        # Draw connections (so they appear behind nodes)
-        for connection in self.connections:
-            connection.draw(painter)
-
-        # Draw nodes
+        # Draw nodes first
         for node in self.nodes:
             node.draw(painter)
+
+        # Draw connections last (so they appear above nodes)
+        for connection in self.connections:
+            connection.draw(painter)
 
         painter.end()
 
@@ -714,33 +843,8 @@ class DiagramCanvas(QWidget):
                     modules[node.module_id] = []
                 modules[node.module_id].append(node)
         
-        # Draw bounding box for each module
-        for module_id, nodes in modules.items():
-            if not nodes:
-                continue
-            
-            # Calculate bounding box
-            min_x = min(node.pos.x() for node in nodes)
-            max_x = max(node.pos.x() for node in nodes)
-            min_y = min(node.pos.y() for node in nodes)
-            max_y = max(node.pos.y() for node in nodes)
-            
-            # Add padding
-            padding = 20
-            rect = QRect(int(min_x - padding), int(min_y - padding), 
-                        int(max_x - min_x + padding * 2), int(max_y - min_y + padding * 2))
-            
-            # Check if any node in this module is selected
-            is_selected = any(node in self.selected_nodes for node in nodes)
-            
-            # Draw bounding box
-            if is_selected:
-                painter.setPen(QPen(QColor(100, 150, 255), 2))
-            else:
-                painter.setPen(QPen(QColor(150, 150, 150), 1))
-            
-            painter.setBrush(QBrush(QColor(200, 220, 255, 20)))  # Semi-transparent fill
-            painter.drawRect(rect)
+        # Module bounding boxes removed - modules are grouped by their selection behavior only
+        pass
 
     def draw_grid(self, painter):
         """Draw an infinite grid on the canvas in canvas coordinates"""

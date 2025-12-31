@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from diagram_elements import Module
+from diagram_actions import CreateModuleAction
 
 
 class ModuleCreationDialog(QDialog):
@@ -21,9 +22,10 @@ class ModuleCreationDialog(QDialog):
         self.canvas = canvas
         self.module_handler = module_handler
         self.selected_nodes = [node for node in canvas.nodes if node.selected]
+        self.selected_images = [image for image in canvas.images if image.selected]
         
         self.setWindowTitle("Create Module")
-        self.setGeometry(200, 200, 500, 400)
+        self.setGeometry(200, 200, 500, 500)
         self.init_ui()
 
     def init_ui(self):
@@ -79,6 +81,36 @@ class ModuleCreationDialog(QDialog):
         info_group.setLayout(info_layout)
         main_layout.addWidget(info_group)
 
+        # Selected images info
+        images_group = QGroupBox("Selected Images")
+        images_layout = QVBoxLayout()
+        
+        if self.selected_images:
+            images_text = QLabel(f"This module will contain {len(self.selected_images)} image(s):")
+            images_layout.addWidget(images_text)
+            
+            # List of selected images
+            self.images_list = QListWidget()
+            self.images_list.setMaximumHeight(100)
+            for image in self.selected_images:
+                item = QListWidgetItem(f"{image.image_path.split('/')[-1]} ({image.width}x{image.height})")
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)  # Make non-selectable
+                self.images_list.addItem(item)
+            
+            images_layout.addWidget(self.images_list)
+        else:
+            images_info = QLabel("No images selected (optional)")
+            images_info.setStyleSheet("color: gray; font-size: 10px;")
+            images_layout.addWidget(images_info)
+            
+            instructions = QLabel("Tip: Click on images on the canvas to select them. Use Ctrl+Click to select multiple images.")
+            instructions.setStyleSheet("color: #666; font-size: 9px; font-style: italic;")
+            instructions.setWordWrap(True)
+            images_layout.addWidget(instructions)
+
+        images_group.setLayout(images_layout)
+        main_layout.addWidget(images_group)
+
         # Preview section
         preview_group = QGroupBox("Module Preview")
         preview_layout = QVBoxLayout()
@@ -121,7 +153,8 @@ class ModuleCreationDialog(QDialog):
             name = "(unnamed)"
         
         node_count = len(self.selected_nodes)
-        preview_text = f'Module "{name}" with {node_count} node(s)'
+        image_count = len(self.selected_images)
+        preview_text = f'Module "{name}" with {node_count} node(s) and {image_count} image(s)'
         self.preview_label.setText(preview_text)
 
     def on_create_module(self):
@@ -144,12 +177,15 @@ class ModuleCreationDialog(QDialog):
         for node in self.selected_nodes:
             module.add_node(node)
         
+        # Add images if any are selected
+        for image in self.selected_images:
+            module.add_image(image)
+        
         # Save the module
         if self.module_handler.save_module(module):
-            # Mark nodes as part of the module
-            for node in self.selected_nodes:
-                node.module_id = module_id
-                node.locked = True
+            # Create and execute the module creation action for undo/redo
+            action = CreateModuleAction(self.canvas, self.selected_nodes, self.selected_images, module_id)
+            self.canvas.execute_action(action)
             
             self.module_created.emit(module)
             self.accept()
