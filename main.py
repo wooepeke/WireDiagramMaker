@@ -17,6 +17,7 @@ from module_dialog import ModuleCreationDialog
 from preferences_dialog import PreferencesDialog
 from diagram_elements import Module, Node
 from properties_panel import PropertiesPanel
+from config_loader import get_config
 
 
 class WireDiagramMaker(QMainWindow):
@@ -238,9 +239,16 @@ class WireDiagramMaker(QMainWindow):
         tools_toolbar = self.addToolBar("Tools")
         tools_toolbar.setMovable(False)
         tools_toolbar.setObjectName("ToolsToolbar")
+        tools_toolbar.setIconSize(QSize(32, 32))
+        tools_toolbar.setStyleSheet("QToolBar { spacing: 8px; padding: 5px; }")
+
+        tools_toolbar.addSeparator()
 
         # Selection tool (cursor)
-        select_btn = QPushButton("◀ Select")
+        select_btn = QPushButton()
+        select_btn.setIcon(QIcon("Icons/select.png"))
+        select_btn.setToolTip("Select (Esc)")
+        select_btn.setFixedSize(40, 40)
         select_btn.clicked.connect(self.on_select_mode)
         select_btn.setCheckable(True)
         self.tool_buttons["select"] = select_btn
@@ -249,14 +257,20 @@ class WireDiagramMaker(QMainWindow):
         tools_toolbar.addSeparator()
 
         # Add node button
-        add_node_btn = QPushButton("● Add Node")
+        add_node_btn = QPushButton()
+        add_node_btn.setIcon(QIcon("Icons/nodes.png"))
+        add_node_btn.setToolTip("Add Node")
+        add_node_btn.setFixedSize(40, 40)
         add_node_btn.clicked.connect(self.on_add_node_toggled)
         add_node_btn.setCheckable(True)
         self.tool_buttons["add_node"] = add_node_btn
         tools_toolbar.addWidget(add_node_btn)
 
         # Add connection button
-        add_conn_btn = QPushButton("┐ Add Connection")
+        add_conn_btn = QPushButton()
+        add_conn_btn.setIcon(QIcon("Icons/connect.png"))
+        add_conn_btn.setToolTip("Add Connection")
+        add_conn_btn.setFixedSize(40, 40)
         add_conn_btn.clicked.connect(self.on_add_connection_toggled)
         add_conn_btn.setCheckable(True)
         self.tool_buttons["add_connection"] = add_conn_btn
@@ -265,7 +279,10 @@ class WireDiagramMaker(QMainWindow):
         tools_toolbar.addSeparator()
 
         # Delete tool
-        delete_btn = QPushButton("🗑 Delete")
+        delete_btn = QPushButton()
+        delete_btn.setIcon(QIcon("Icons/delete.png"))
+        delete_btn.setToolTip("Delete (Del)")
+        delete_btn.setFixedSize(40, 40)
         delete_btn.clicked.connect(self.on_delete)
         tools_toolbar.addWidget(delete_btn)
 
@@ -275,33 +292,49 @@ class WireDiagramMaker(QMainWindow):
         zoom_toolbar = self.addToolBar("Zoom")
         zoom_toolbar.setMovable(False)
         zoom_toolbar.setObjectName("ZoomToolbar")
+        zoom_toolbar.setIconSize(QSize(32, 32))
+        zoom_toolbar.setStyleSheet("QToolBar { spacing: 8px; padding: 5px; }")
 
-        zoom_in_btn = QPushButton("Zoom In")
+        zoom_in_btn = QPushButton()
+        zoom_in_btn.setIcon(QIcon("Icons/zoom-in.png"))
+        zoom_in_btn.setToolTip("Zoom In")
+        zoom_in_btn.setFixedSize(40, 40)
         zoom_in_btn.clicked.connect(self.on_zoom_in)
         zoom_toolbar.addWidget(zoom_in_btn)
 
-        zoom_out_btn = QPushButton("Zoom Out")
+        zoom_out_btn = QPushButton()
+        zoom_out_btn.setIcon(QIcon("Icons/zoom-out.png"))
+        zoom_out_btn.setToolTip("Zoom Out")
+        zoom_out_btn.setFixedSize(40, 40)
         zoom_out_btn.clicked.connect(self.on_zoom_out)
         zoom_toolbar.addWidget(zoom_out_btn)
 
-        reset_zoom_btn = QPushButton("Reset Zoom")
-        reset_zoom_btn.clicked.connect(self.on_reset_zoom)
-        zoom_toolbar.addWidget(reset_zoom_btn)
+        # reset_zoom_btn = QPushButton("Reset Zoom")
+        # reset_zoom_btn.clicked.connect(self.on_reset_zoom)
+        # zoom_toolbar.addWidget(reset_zoom_btn)
 
         # Module edit toolbar (initially hidden)
         module_edit_toolbar = self.addToolBar("Module Edit")
         module_edit_toolbar.setMovable(False)
         module_edit_toolbar.setObjectName("ModuleEditToolbar")
+        module_edit_toolbar.setIconSize(QSize(32, 32))
+        module_edit_toolbar.setStyleSheet("QToolBar { spacing: 8px; padding: 5px; }")
         
         module_edit_label = QLabel("Editing Module: ")
         module_edit_label.setStyleSheet("color: orange; font-weight: bold; padding-right: 10px;")
         module_edit_toolbar.addWidget(module_edit_label)
         
-        save_module_btn = QPushButton("Save")
+        save_module_btn = QPushButton()
+        save_module_btn.setIcon(QIcon("Icons/save.png"))
+        save_module_btn.setToolTip("Save Module")
+        save_module_btn.setFixedSize(40, 40)
         save_module_btn.clicked.connect(self.on_module_edit_saved)
         module_edit_toolbar.addWidget(save_module_btn)
         
-        cancel_module_btn = QPushButton("Cancel")
+        cancel_module_btn = QPushButton()
+        cancel_module_btn.setIcon(QIcon("Icons/cancel.png"))
+        cancel_module_btn.setToolTip("Cancel Editing")
+        cancel_module_btn.setFixedSize(40, 40)
         cancel_module_btn.clicked.connect(self.on_module_edit_cancelled)
         module_edit_toolbar.addWidget(cancel_module_btn)
         
@@ -310,6 +343,16 @@ class WireDiagramMaker(QMainWindow):
 
     def set_active_tool(self, tool_name):
         """Set the active tool and update button styling"""
+        config = get_config()
+        
+        # Get toolbar colors from config
+        bg_color = config.get("toolbar", {}).get("active_tool_background_color", [76, 175, 80])
+        text_color = config.get("toolbar", {}).get("active_tool_text_color", [255, 255, 255])
+        
+        # Convert RGB to hex
+        bg_hex = "#{:02x}{:02x}{:02x}".format(bg_color[0], bg_color[1], bg_color[2])
+        text_hex = "#{:02x}{:02x}{:02x}".format(text_color[0], text_color[1], text_color[2])
+        
         # Deactivate previously active tool
         if self.active_tool and self.active_tool in self.tool_buttons:
             self.tool_buttons[self.active_tool].setChecked(False)
@@ -320,7 +363,7 @@ class WireDiagramMaker(QMainWindow):
             self.active_tool = tool_name
             self.tool_buttons[tool_name].setChecked(True)
             self.tool_buttons[tool_name].setStyleSheet(
-                "background-color: #4CAF50; color: white; font-weight: bold;"
+                f"background-color: {bg_hex}; color: {text_hex}; font-weight: bold;"
             )
         else:
             self.active_tool = None

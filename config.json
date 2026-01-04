@@ -102,6 +102,18 @@
     "max": 5.0,
     "increment": 1.2
   },
+  "toolbar": {
+    "active_tool_background_color": [
+      90,
+      90,
+      90
+    ],
+    "active_tool_text_color": [
+      255,
+      255,
+      255
+    ]
+  },
   "features": {
     "snap_to_grid_enabled": true,
     "antialiasing_enabled": true

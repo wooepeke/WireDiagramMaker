@@ -616,6 +616,7 @@ class DiagramCanvas(QWidget):
         self.selected_nodes.clear()
         self.selected_connections.clear()
         self.selected_module_id = None
+        self.selection_changed.emit()
         self.update()
 
     def get_selected_images(self):
