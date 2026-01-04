@@ -77,6 +77,12 @@ class WireDiagramMaker(QMainWindow):
         self.properties_panel.image_rotated.connect(
             self.on_image_rotated
         )
+        self.properties_panel.module_rotated_cw.connect(
+            self.on_module_rotated_cw
+        )
+        self.properties_panel.module_rotated_ccw.connect(
+            self.on_module_rotated_ccw
+        )
         central_layout.addWidget(self.properties_panel, stretch=0)
 
         # Set the central widget
@@ -321,6 +327,22 @@ class WireDiagramMaker(QMainWindow):
         """Handle image rotation from properties panel"""
         self.canvas.update()
         self.canvas.diagram_modified.emit()
+
+    def on_module_rotated_cw(self):
+        """Handle module rotation clockwise from properties panel"""
+        module_id = self.properties_panel.selected_module_id
+        if module_id:
+            self.canvas.rotate_module(module_id, 1)  # 1 for clockwise
+            self.canvas.update()
+            self.canvas.diagram_modified.emit()
+
+    def on_module_rotated_ccw(self):
+        """Handle module rotation counter-clockwise from properties panel"""
+        module_id = self.properties_panel.selected_module_id
+        if module_id:
+            self.canvas.rotate_module(module_id, -1)  # -1 for counter-clockwise
+            self.canvas.update()
+            self.canvas.diagram_modified.emit()
 
     def update_properties_panel(self):
         """Update properties panel with current selection"""

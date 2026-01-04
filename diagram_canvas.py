@@ -2,6 +2,7 @@
 Canvas widget for drawing wire diagrams
 """
 
+import math
 from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
@@ -768,6 +769,90 @@ class DiagramCanvas(QWidget):
     def set_default_connection_color(self, color):
         """Set the default color for new connections"""
         self.default_connection_color = color
+
+    def rotate_module(self, module_id, direction):
+        """
+        Rotate a module and all its nodes around their centroid.
+        
+        Args:
+            module_id: The ID of the module to rotate
+            direction: 1 for clockwise (+90°), -1 for counter-clockwise (-90°)
+        """
+        # Find all nodes belonging to this module
+        module_nodes = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == module_id]
+        module_images = [img for img in self.images if hasattr(img, 'module_instance_id') and getattr(img, 'module_instance_id', None) == module_id]
+        
+        if not module_nodes:
+            return
+        
+        # Calculate the centroid of ALL module elements (nodes AND images)
+        all_positions = []
+        
+        # Add node positions
+        for node in module_nodes:
+            all_positions.append((node.pos.x(), node.pos.y()))
+        
+        # Add image center positions
+        for image in module_images:
+            # Image center is at pos + (width/2, height/2)
+            image_center_x = image.pos.x() + image.width / 2
+            image_center_y = image.pos.y() + image.height / 2
+            all_positions.append((image_center_x, image_center_y))
+        
+        # Calculate centroid from all positions
+        total_x = sum(x for x, y in all_positions)
+        total_y = sum(y for x, y in all_positions)
+        centroid_x = total_x / len(all_positions)
+        centroid_y = total_y / len(all_positions)
+        
+        # Rotation angle in radians
+        angle = direction * 90  # degrees
+        angle_rad = math.radians(angle)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        # Rotate each node around the centroid
+        for node in module_nodes:
+            # Translate node relative to centroid
+            dx = node.pos.x() - centroid_x
+            dy = node.pos.y() - centroid_y
+            
+            # Apply rotation
+            rotated_x = dx * cos_a - dy * sin_a
+            rotated_y = dx * sin_a + dy * cos_a
+            
+            # Translate back
+            new_x = rotated_x + centroid_x
+            new_y = rotated_y + centroid_y
+            
+            # Update node position
+            node.pos = QPoint(int(new_x), int(new_y))
+            node.update_rect()
+        
+        # Rotate each image around the centroid
+        for image in module_images:
+            # Get image center
+            image_center_x = image.pos.x() + image.width / 2
+            image_center_y = image.pos.y() + image.height / 2
+            
+            # Translate image center relative to centroid
+            dx = image_center_x - centroid_x
+            dy = image_center_y - centroid_y
+            
+            # Apply rotation
+            rotated_x = dx * cos_a - dy * sin_a
+            rotated_y = dx * sin_a + dy * cos_a
+            
+            # Translate back to centroid
+            new_center_x = rotated_x + centroid_x
+            new_center_y = rotated_y + centroid_y
+            
+            # Update image position (top-left corner, not center)
+            image.pos = QPoint(int(new_center_x - image.width / 2), int(new_center_y - image.height / 2))
+            image.update_rect()
+            
+            # Also rotate the image itself
+            image.rotation = (image.rotation + angle) % 360
 
     def execute_action(self, action):
         """Execute an action and add it to the undo stack"""

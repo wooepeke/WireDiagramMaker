@@ -19,7 +19,8 @@ class PropertiesPanel(QWidget):
     node_class_changed = pyqtSignal(str)  # Emitted when node class changes
     connection_color_changed = pyqtSignal(QColor)
     image_rotated = pyqtSignal()  # Emitted when image is rotated
-    module_rotated = pyqtSignal()  # Emitted when module is rotated
+    module_rotated_cw = pyqtSignal()  # Emitted when module is rotated clockwise
+    module_rotated_ccw = pyqtSignal()  # Emitted when module is rotated counter-clockwise
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -397,9 +398,9 @@ class PropertiesPanel(QWidget):
     def on_module_rotate_cw(self):
         """Rotate selected module clockwise by 90 degrees"""
         if self.selected_module_id:
-            self.module_rotated.emit()
+            self.module_rotated_cw.emit()
 
     def on_module_rotate_ccw(self):
         """Rotate selected module counter-clockwise by 90 degrees"""
         if self.selected_module_id:
-            self.module_rotated.emit()
+            self.module_rotated_ccw.emit()
