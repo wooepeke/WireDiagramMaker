@@ -672,12 +672,7 @@ class WireDiagramMaker(QMainWindow):
             "About Wire Diagram Maker",
             "Wire Diagram Maker v1.0\n\n"
             "A PyQt5 application for creating wire diagrams.\n\n"
-            "Features:\n"
-            "- Add nodes to the canvas\n"
-            "- Connect nodes with wires\n"
-            "- Drag nodes to reposition\n"
-            "- Save and load diagrams\n"
-            "- Zoom and pan controls",
+            "Developed by Xavier Reparon.",
         )
 
     def on_create_module(self):
