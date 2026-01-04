@@ -82,6 +82,12 @@ class DiagramCanvas(QWidget):
         # Selection settings
         self.selected_nodes = []
         self.selected_connections = []
+        self.selected_module_id = None  # Track the currently selected module
+        
+        # Module edit mode
+        self.module_edit_mode = False  # True when editing a module
+        self.module_being_edited = None  # ID of the module being edited
+        self.module_edit_original_positions = {}  # Store original positions for cancel: {node/image: pos}
 
         # Undo/Redo stacks
         self.undo_stack = []
@@ -177,8 +183,19 @@ class DiagramCanvas(QWidget):
             adjusted_pos = self.screen_to_canvas(pos)
             clicked_node = self.get_node_at(adjusted_pos)
             if clicked_node:
+                # Check if this node is part of a module
+                if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id:
+                    self.show_module_context_menu(clicked_node.module_id, event.globalPos())
+                    return
                 self.show_node_context_menu(clicked_node, event.globalPos())
                 return
+            
+            clicked_image = self.get_image_at(adjusted_pos)
+            if clicked_image:
+                # Check if this image is part of a module
+                if hasattr(clicked_image, 'module_instance_id') and clicked_image.module_instance_id:
+                    self.show_module_context_menu(clicked_image.module_instance_id, event.globalPos())
+                    return
             
             clicked_connection = self.get_connection_at(adjusted_pos)
             if clicked_connection:
@@ -222,17 +239,31 @@ class DiagramCanvas(QWidget):
                 ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 shift_pressed = event.modifiers() & Qt.KeyboardModifier.ShiftModifier
                 
-                # If node is part of a module (locked), always select the entire module
-                if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id:
+                # If node is part of a module (locked), behavior depends on edit mode
+                if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id and not self.module_edit_mode:
+                    # Not in edit mode - select the entire module
                     self.clear_selection()
                     module_id = clicked_node.module_id
+                    self.selected_module_id = module_id
                     for node in self.nodes:
                         if hasattr(node, 'module_id') and node.module_id == module_id:
                             self.select_node(node, multi=True)
+                elif self.module_edit_mode and ctrl_pressed:
+                    # In edit mode with Ctrl - toggle individual node selection
+                    if clicked_node in self.selected_nodes:
+                        self.deselect_node(clicked_node)
+                    else:
+                        self.select_node(clicked_node, multi=True)
+                elif self.module_edit_mode:
+                    # In edit mode without Ctrl - select single node
+                    self.clear_selection()
+                    self.select_node(clicked_node)
                 elif shift_pressed and hasattr(clicked_node, 'module_id'):
                     # Shift+click selects all nodes in the module
+
                     self.clear_selection()
                     module_id = clicked_node.module_id
+                    self.selected_module_id = module_id
                     for node in self.nodes:
                         if hasattr(node, 'module_id') and node.module_id == module_id:
                             self.select_node(node, multi=True)
@@ -275,6 +306,7 @@ class DiagramCanvas(QWidget):
                         if module_nodes:
                             # Clear and select all module nodes
                             self.clear_selection()
+                            self.selected_module_id = module_id
                             for node in module_nodes:
                                 self.select_node(node, multi=True)
                             # Start dragging from the first node
@@ -583,6 +615,7 @@ class DiagramCanvas(QWidget):
             image.set_selected(False)
         self.selected_nodes.clear()
         self.selected_connections.clear()
+        self.selected_module_id = None
         self.update()
 
     def get_selected_images(self):
@@ -699,6 +732,20 @@ class DiagramCanvas(QWidget):
         
         menu.exec_(global_pos)
 
+    def show_module_context_menu(self, module_id, global_pos):
+        """Show a context menu for a module"""
+        menu = QMenu(self)
+        
+        edit_action = menu.addAction("Edit Module")
+        edit_action.triggered.connect(lambda: self.edit_module(module_id))
+        
+        menu.addSeparator()
+        
+        delete_action = menu.addAction("Delete Module")
+        delete_action.triggered.connect(lambda: self.delete_module(module_id))
+        
+        menu.exec_(global_pos)
+
     def edit_node(self, node):
         """Edit node properties"""
         dialog = NodePropertiesDialog(node, self)
@@ -732,6 +779,143 @@ class DiagramCanvas(QWidget):
         # Remove from selection
         self.deselect_connection(connection)
         self.update()
+
+    def edit_module(self, module_id):
+        """Enter edit mode for a module"""
+        # Set edit mode
+        self.module_edit_mode = True
+        self.module_being_edited = module_id
+        
+        # Store original positions before unlocking
+        self.module_edit_original_positions = {}
+        
+        # Select the module
+        self.clear_selection()
+        self.selected_module_id = module_id
+        
+        # Unlock all nodes in the module so they can be edited and store their original positions
+        module_nodes = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == module_id]
+        for node in module_nodes:
+            self.module_edit_original_positions[id(node)] = QPoint(node.pos)  # Store original position
+            node.locked = False  # Unlock for editing
+            self.select_node(node, multi=True)
+        
+        # Store original positions of images
+        module_images = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == module_id]
+        for image in module_images:
+            self.module_edit_original_positions[id(image)] = QPoint(image.pos)  # Store original position
+        
+        # Emit a signal to notify the main window/properties panel that we're in edit mode
+        self.selection_changed.emit()
+        self.update()
+
+    def delete_module(self, module_id):
+        """Delete a module and all its elements"""
+        # Find and delete all nodes in this module
+        nodes_to_delete = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == module_id]
+        for node in nodes_to_delete:
+            # Remove connections
+            self.connections = [
+                conn for conn in self.connections
+                if conn.node1 != node and conn.node2 != node
+            ]
+            # Remove node
+            if node in self.nodes:
+                self.nodes.remove(node)
+        
+        # Find and delete all images in this module
+        images_to_delete = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == module_id]
+        for image in images_to_delete:
+            if image in self.images:
+                self.images.remove(image)
+        
+        # Clear selection if it was this module
+        if self.selected_module_id == module_id:
+            self.clear_selection()
+        
+        self.diagram_modified.emit()
+        self.update()
+
+    def save_module_edits(self):
+        """Save changes made to a module during edit mode"""
+        # Lock nodes again after editing
+        if self.module_being_edited:
+            try:
+                from module_handler import ModuleHandler
+                from diagram_elements import Module
+                
+                # Get all nodes and images in the module
+                module_nodes = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == self.module_being_edited]
+                module_images = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == self.module_being_edited]
+                
+                # Lock all nodes to re-group the module
+                for node in module_nodes:
+                    node.locked = True
+                
+                # Extract base module ID (remove _inst_X suffix if present)
+                base_module_id = self.module_being_edited.split('_inst_')[0]
+                
+                # Load the original module to get its name
+                handler = ModuleHandler()
+                original_module = handler.load_module(base_module_id)
+                module_name = original_module.name if original_module else f"Module {base_module_id[:4]}"
+                
+                # Create a Module object with the current state and original name
+                module = Module(base_module_id, module_name)
+                
+                # Add nodes to module (without module_id and locked attributes, just raw state)
+                for node in module_nodes:
+                    # Create a clean node for saving
+                    clean_node = Node(node.name, QPoint(node.pos))
+                    clean_node.node_class = node.node_class
+                    clean_node.color = QColor(node.color.red(), node.color.green(), node.color.blue())
+                    module.add_node(clean_node)
+                
+                # Add images to module
+                for image in module_images:
+                    from diagram_elements import Image
+                    clean_image = Image(image.image_path, QPoint(image.pos), image.width, image.height)
+                    clean_image.rotation = image.rotation
+                    module.add_image(clean_image)
+                
+                # Save the module using ModuleHandler
+                if handler.save_module(module):
+                    print(f"Module edit saved successfully: {self.module_being_edited}")
+                else:
+                    print(f"Failed to save module: {self.module_being_edited}")
+                
+                # Clear stored positions after successful save
+                self.module_edit_original_positions = {}
+                
+            except Exception as e:
+                print(f"Error saving module edits: {e}")
+                import traceback
+                traceback.print_exc()
+
+    def cancel_module_edits(self):
+        """Cancel module edit - discard changes and restore original positions"""
+        # Restore original positions and lock nodes again
+        if self.module_being_edited:
+            # Restore node positions
+            module_nodes = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == self.module_being_edited]
+            for node in module_nodes:
+                node_id = id(node)
+                if node_id in self.module_edit_original_positions:
+                    node.pos = self.module_edit_original_positions[node_id]
+                    node.update_rect()
+                node.locked = True  # Lock again
+            
+            # Restore image positions
+            module_images = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == self.module_being_edited]
+            for image in module_images:
+                image_id = id(image)
+                if image_id in self.module_edit_original_positions:
+                    image.pos = self.module_edit_original_positions[image_id]
+                    image.update_rect()
+            
+            # Clear stored positions
+            self.module_edit_original_positions = {}
+            print(f"Module edit cancelled: {self.module_being_edited}")
 
     def set_selected_nodes_color(self, color):
         """Set color for all selected nodes"""
@@ -938,17 +1122,63 @@ class DiagramCanvas(QWidget):
         painter.end()
 
     def draw_module_bounding_boxes(self, painter):
-        """Draw bounding boxes around modules to visually group them"""
-        # Group nodes by module_id
-        modules = {}
-        for node in self.nodes:
-            if getattr(node, 'locked', False) and hasattr(node, 'module_id') and node.module_id:
-                if node.module_id not in modules:
-                    modules[node.module_id] = []
-                modules[node.module_id].append(node)
+        """Draw bounding boxes around selected modules"""
+        if not self.selected_module_id:
+            return
         
-        # Module bounding boxes removed - modules are grouped by their selection behavior only
-        pass
+        # Find all nodes and images belonging to the selected module
+        module_nodes = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == self.selected_module_id]
+        module_images = [img for img in self.images if hasattr(img, 'module_instance_id') and getattr(img, 'module_instance_id', None) == self.selected_module_id]
+        
+        if not module_nodes and not module_images:
+            return
+        
+        # Collect all bounding points for accurate calculation
+        bounds_points = []
+        
+        # Include node bounds
+        for node in module_nodes:
+            node_radius = node.NODE_RADIUS
+            node_x = node.pos.x()
+            node_y = node.pos.y()
+            bounds_points.append((node_x - node_radius, node_y - node_radius))
+            bounds_points.append((node_x + node_radius, node_y + node_radius))
+        
+        # Include image bounds (using their actual rotated bounding rectangles)
+        for image in module_images:
+            # Use the image's rect which accounts for rotation
+            img_rect = image.rect
+            bounds_points.append((img_rect.left(), img_rect.top()))
+            bounds_points.append((img_rect.right(), img_rect.bottom()))
+        
+        if not bounds_points:
+            return
+        
+        # Calculate min/max from all bounds points
+        min_x = min(p[0] for p in bounds_points)
+        max_x = max(p[0] for p in bounds_points)
+        min_y = min(p[1] for p in bounds_points)
+        max_y = max(p[1] for p in bounds_points)
+        
+        # Add padding around the bounding box
+        padding = 10
+        min_x -= padding
+        min_y -= padding
+        max_x += padding
+        max_y += padding
+        
+        # Draw the bounding box
+        config = get_config()
+        
+        # Draw a light highlight rectangle as background
+        highlight_color = QColor(100, 150, 255, 30)  # Light blue with transparency
+        painter.fillRect(int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y), highlight_color)
+        
+        # Draw the border
+        border_color = QColor(100, 150, 255, 200)  # Solid blue
+        border_width = 2
+        painter.setPen(QPen(border_color, border_width))
+        painter.drawRect(int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y))
 
     def draw_grid(self, painter):
         """Draw an infinite grid on the canvas in canvas coordinates"""

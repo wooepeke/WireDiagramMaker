@@ -83,6 +83,12 @@ class WireDiagramMaker(QMainWindow):
         self.properties_panel.module_rotated_ccw.connect(
             self.on_module_rotated_ccw
         )
+        self.properties_panel.module_edit_saved.connect(
+            self.on_module_edit_saved
+        )
+        self.properties_panel.module_edit_cancelled.connect(
+            self.on_module_edit_cancelled
+        )
         central_layout.addWidget(self.properties_panel, stretch=0)
 
         # Set the central widget
@@ -282,6 +288,26 @@ class WireDiagramMaker(QMainWindow):
         reset_zoom_btn.clicked.connect(self.on_reset_zoom)
         zoom_toolbar.addWidget(reset_zoom_btn)
 
+        # Module edit toolbar (initially hidden)
+        module_edit_toolbar = self.addToolBar("Module Edit")
+        module_edit_toolbar.setMovable(False)
+        module_edit_toolbar.setObjectName("ModuleEditToolbar")
+        
+        module_edit_label = QLabel("Editing Module: ")
+        module_edit_label.setStyleSheet("color: orange; font-weight: bold; padding-right: 10px;")
+        module_edit_toolbar.addWidget(module_edit_label)
+        
+        save_module_btn = QPushButton("Save")
+        save_module_btn.clicked.connect(self.on_module_edit_saved)
+        module_edit_toolbar.addWidget(save_module_btn)
+        
+        cancel_module_btn = QPushButton("Cancel")
+        cancel_module_btn.clicked.connect(self.on_module_edit_cancelled)
+        module_edit_toolbar.addWidget(cancel_module_btn)
+        
+        module_edit_toolbar.hide()  # Hide by default
+        self.module_edit_toolbar = module_edit_toolbar  # Store reference to show/hide later
+
     def set_active_tool(self, tool_name):
         """Set the active tool and update button styling"""
         # Deactivate previously active tool
@@ -344,6 +370,28 @@ class WireDiagramMaker(QMainWindow):
             self.canvas.update()
             self.canvas.diagram_modified.emit()
 
+    def on_module_edit_saved(self):
+        """Handle module edit save"""
+        # Save the module changes and exit edit mode
+        self.canvas.save_module_edits()
+        self.canvas.module_edit_mode = False
+        self.canvas.module_being_edited = None
+        self.canvas.clear_selection()
+        self.properties_panel.set_module_edit_mode(False)
+        self.module_edit_toolbar.hide()  # Hide the toolbar
+        self.canvas.update()
+
+    def on_module_edit_cancelled(self):
+        """Handle module edit cancel"""
+        # Discard module changes and exit edit mode
+        self.canvas.cancel_module_edits()
+        self.canvas.module_edit_mode = False
+        self.canvas.module_being_edited = None
+        self.canvas.clear_selection()
+        self.properties_panel.set_module_edit_mode(False)
+        self.module_edit_toolbar.hide()  # Hide the toolbar
+        self.canvas.update()
+
     def update_properties_panel(self):
         """Update properties panel with current selection"""
         self.properties_panel.set_selected_elements(
@@ -351,6 +399,14 @@ class WireDiagramMaker(QMainWindow):
             self.canvas.selected_connections,
             self.canvas.get_selected_images()
         )
+        # Show edit controls if in module edit mode
+        self.properties_panel.set_module_edit_mode(self.canvas.module_edit_mode)
+        
+        # Show/hide module edit toolbar based on edit mode
+        if self.canvas.module_edit_mode:
+            self.module_edit_toolbar.show()
+        else:
+            self.module_edit_toolbar.hide()
 
     def on_canvas_mode_changed(self, mode):
         """Handle canvas mode changes"""

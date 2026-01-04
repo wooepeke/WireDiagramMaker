@@ -21,6 +21,8 @@ class PropertiesPanel(QWidget):
     image_rotated = pyqtSignal()  # Emitted when image is rotated
     module_rotated_cw = pyqtSignal()  # Emitted when module is rotated clockwise
     module_rotated_ccw = pyqtSignal()  # Emitted when module is rotated counter-clockwise
+    module_edit_saved = pyqtSignal()  # Emitted when module edit is saved
+    module_edit_cancelled = pyqtSignal()  # Emitted when module edit is cancelled
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -214,10 +216,30 @@ class PropertiesPanel(QWidget):
         rotation_layout.addStretch()
         layout.addLayout(rotation_layout)
 
+        # Edit mode controls (Save/Cancel buttons)
+        self.module_edit_controls = QWidget()
+        edit_controls_layout = QVBoxLayout()
+        
+        edit_status_label = QLabel("Editing Module")
+        edit_status_label.setStyleSheet("color: orange; font-weight: bold;")
+        edit_controls_layout.addWidget(edit_status_label)
+        
+        button_layout = QHBoxLayout()
+        self.module_save_btn = QPushButton("Save")
+        self.module_cancel_btn = QPushButton("Cancel")
+        self.module_save_btn.clicked.connect(self.on_module_save)
+        self.module_cancel_btn.clicked.connect(self.on_module_cancel)
+        button_layout.addWidget(self.module_save_btn)
+        button_layout.addWidget(self.module_cancel_btn)
+        edit_controls_layout.addLayout(button_layout)
+        
+        self.module_edit_controls.setLayout(edit_controls_layout)
+        self.module_edit_controls.hide()  # Initially hidden
+        layout.addWidget(self.module_edit_controls)
+
         layout.addStretch()
         panel.setLayout(layout)
         return panel
-
     def _create_image_panel(self):
         """Create the image editor panel"""
         panel = QWidget()
@@ -361,14 +383,15 @@ class PropertiesPanel(QWidget):
 
     def update_module_display(self, nodes, module_id):
         """Update the module panel with module information"""
-        # Extract module name from the first node's data (we'll use a simple approach)
-        # In a real implementation, you might want to load the module from file to get the name
+        # Extract base module ID (remove _inst_X suffix if present)
+        base_module_id = module_id.split('_inst_')[0]
+        
         self.module_id_display.setText(module_id)
         self.module_node_count.setText(str(len(nodes)))
         
         # Try to find the module name from the module_handler
         # For now, we'll display the module ID as the name if we can't find it
-        module_name = f"Module {module_id[:4]}"
+        module_name = f"Module {base_module_id[:4]}"
         
         # Check if we can get the actual module name
         try:
@@ -376,13 +399,20 @@ class PropertiesPanel(QWidget):
             handler = ModuleHandler()
             modules = handler.get_available_modules()
             for mod_info in modules:
-                if mod_info["id"] == module_id:
+                if mod_info["id"] == base_module_id:
                     module_name = mod_info["name"]
                     break
         except:
             pass
         
         self.module_name_display.setText(module_name)
+
+    def set_module_edit_mode(self, is_editing):
+        """Show or hide module edit controls"""
+        if is_editing:
+            self.module_edit_controls.show()
+        else:
+            self.module_edit_controls.hide()
 
     def on_rotate_cw(self):
         """Rotate selected image clockwise by 90 degrees"""
@@ -404,3 +434,11 @@ class PropertiesPanel(QWidget):
         """Rotate selected module counter-clockwise by 90 degrees"""
         if self.selected_module_id:
             self.module_rotated_ccw.emit()
+
+    def on_module_save(self):
+        """Save module edits"""
+        self.module_edit_saved.emit()
+
+    def on_module_cancel(self):
+        """Cancel module edits"""
+        self.module_edit_cancelled.emit()

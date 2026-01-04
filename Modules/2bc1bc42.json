@@ -1,0 +1,56 @@
+{
+    "id": "2bc1bc42",
+    "name": "SW250mgServo",
+    "nodes": [
+        {
+            "name": "Node3",
+            "pos": {
+                "x": 780,
+                "y": 620
+            },
+            "class": "5V",
+            "color": [
+                255,
+                51,
+                51
+            ]
+        },
+        {
+            "name": "Node5",
+            "pos": {
+                "x": 780,
+                "y": 640
+            },
+            "class": "PWM",
+            "color": [
+                255,
+                219,
+                77
+            ]
+        },
+        {
+            "name": "Node6",
+            "pos": {
+                "x": 780,
+                "y": 600
+            },
+            "class": "GRD",
+            "color": [
+                0,
+                0,
+                0
+            ]
+        }
+    ],
+    "images": [
+        {
+            "path": "C:/Users/xavie/TuDelft/Master Robotics/Thesis/SoftRobotics/WireDiagramMaker/Images/SW-0250MG_4.png",
+            "pos": {
+                "x": 782,
+                "y": 569
+            },
+            "width": 780,
+            "height": 184
+        }
+    ]
+}
