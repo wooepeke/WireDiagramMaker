@@ -277,12 +277,49 @@ class Image:
             print(f"Error loading image {self.image_path}: {e}")
 
     def update_rect(self):
-        """Update the bounding rectangle of the image"""
+        """Update the bounding rectangle of the image based on rotation"""
+        import math
+        
+        # Calculate the actual axis-aligned bounding box of the rotated image
+        center_x = self.pos.x() + self.width / 2
+        center_y = self.pos.y() + self.height / 2
+        
+        # Get the four corners in unrotated space
+        half_w = self.width / 2
+        half_h = self.height / 2
+        corners = [
+            (-half_w, -half_h),
+            (half_w, -half_h),
+            (half_w, half_h),
+            (-half_w, half_h),
+        ]
+        
+        # Rotate corners and find bounding box
+        angle_rad = math.radians(self.rotation)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        rotated_corners = []
+        for dx, dy in corners:
+            rotated_x = dx * cos_a - dy * sin_a
+            rotated_y = dx * sin_a + dy * cos_a
+            rotated_corners.append((rotated_x, rotated_y))
+        
+        # Find min/max x and y
+        xs = [x for x, y in rotated_corners]
+        ys = [y for x, y in rotated_corners]
+        
+        min_x = min(xs)
+        max_x = max(xs)
+        min_y = min(ys)
+        max_y = max(ys)
+        
+        # Convert to screen coordinates
         self.rect = QRect(
-            int(self.pos.x()),
-            int(self.pos.y()),
-            self.width,
-            self.height
+            int(center_x + min_x),
+            int(center_y + min_y),
+            int(max_x - min_x),
+            int(max_y - min_y)
         )
 
     def set_selected(self, selected):
@@ -291,32 +328,21 @@ class Image:
 
     def get_resize_handle_at(self, pos, handle_size=12):
         """Check if position is on a resize handle. Returns 'tl', 'br', or None"""
-        import math
+        # Update rect first to ensure it's current
+        self.update_rect()
         
-        # Get image center
-        center_x = self.pos.x() + self.width / 2
-        center_y = self.pos.y() + self.height / 2
+        # Check corners of the axis-aligned bounding box
+        tl = self.rect.topLeft()
+        br = self.rect.bottomRight()
         
-        # Translate point to center-based coordinates
-        dx = pos.x() - center_x
-        dy = pos.y() - center_y
-        
-        # Rotate point back (negative rotation) to unrotated space
-        angle_rad = math.radians(-self.rotation)
-        cos_a = math.cos(angle_rad)
-        sin_a = math.sin(angle_rad)
-        
-        rotated_dx = dx * cos_a - dy * sin_a
-        rotated_dy = dx * sin_a + dy * cos_a
-        
-        # Check if point is on top-left corner (in unrotated space)
-        if (abs(rotated_dx + self.width / 2) <= handle_size and 
-            abs(rotated_dy + self.height / 2) <= handle_size):
+        # Check if point is on top-left corner
+        if (abs(pos.x() - tl.x()) <= handle_size and 
+            abs(pos.y() - tl.y()) <= handle_size):
             return 'tl'
         
-        # Check if point is on bottom-right corner (in unrotated space)
-        if (abs(rotated_dx - self.width / 2) <= handle_size and 
-            abs(rotated_dy - self.height / 2) <= handle_size):
+        # Check if point is on bottom-right corner
+        if (abs(pos.x() - br.x()) <= handle_size and 
+            abs(pos.y() - br.y()) <= handle_size):
             return 'br'
         
         return None
@@ -364,23 +390,26 @@ class Image:
         
         # Draw the image
         if self.svg_renderer and self.svg_renderer.isValid():
-            rect_f = QRectF(self.rect)
+            rect_f = QRectF(int(self.pos.x()), int(self.pos.y()), int(self.width), int(self.height))
             self.svg_renderer.render(painter, rect_f)
         elif self.pixmap:
             # Scale pixmap to fit within the specified width and height while maintaining aspect ratio
-            scaled_pixmap = self.pixmap.scaledToWidth(self.width, Qt.SmoothTransformation)
+            scaled_pixmap = self.pixmap.scaledToWidth(int(self.width), Qt.SmoothTransformation)
             # If scaled height exceeds desired height, scale by height instead
-            if scaled_pixmap.height() > self.height:
-                scaled_pixmap = self.pixmap.scaledToHeight(self.height, Qt.SmoothTransformation)
+            if scaled_pixmap.height() > int(self.height):
+                scaled_pixmap = self.pixmap.scaledToHeight(int(self.height), Qt.SmoothTransformation)
             painter.drawPixmap(self.pos, scaled_pixmap)
         
-        # Draw selection border (rotated with the image)
+        # Restore painter state
+        painter.restore()
+        
+        # Draw selection border and handles using axis-aligned rect (not rotated)
         if self.selected:
             painter.setPen(QPen(QColor(200, 0, 0), 3))
             painter.setBrush(QBrush(Qt.NoBrush))
             painter.drawRect(self.rect)
             
-            # Draw resize handles
+            # Draw resize handles at corners
             handle_size = 8
             painter.fillRect(self.rect.topLeft().x() - handle_size//2, 
                            self.rect.topLeft().y() - handle_size//2, 
@@ -388,9 +417,6 @@ class Image:
             painter.fillRect(self.rect.bottomRight().x() - handle_size//2, 
                            self.rect.bottomRight().y() - handle_size//2, 
                            handle_size, handle_size, QColor(200, 0, 0))
-        
-        # Restore painter state
-        painter.restore()
 
     def to_dict(self):
         """Convert image to dictionary for JSON serialization"""

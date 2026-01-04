@@ -19,12 +19,14 @@ class PropertiesPanel(QWidget):
     node_class_changed = pyqtSignal(str)  # Emitted when node class changes
     connection_color_changed = pyqtSignal(QColor)
     image_rotated = pyqtSignal()  # Emitted when image is rotated
+    module_rotated = pyqtSignal()  # Emitted when module is rotated
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_nodes = []
         self.selected_connections = []
         self.selected_image = None  # Track selected image for rotation
+        self.selected_module_id = None  # Track selected module for rotation
         self.init_ui()
 
     def init_ui(self):
@@ -197,6 +199,20 @@ class PropertiesPanel(QWidget):
         count_layout.addStretch()
         layout.addLayout(count_layout)
 
+        # Rotation controls
+        rotation_label = QLabel("Rotation:")
+        layout.addWidget(rotation_label)
+
+        rotation_layout = QHBoxLayout()
+        self.module_rotate_ccw_btn = QPushButton("↺ -90°")
+        self.module_rotate_cw_btn = QPushButton("+90° ↻")
+        self.module_rotate_ccw_btn.clicked.connect(self.on_module_rotate_ccw)
+        self.module_rotate_cw_btn.clicked.connect(self.on_module_rotate_cw)
+        rotation_layout.addWidget(self.module_rotate_ccw_btn)
+        rotation_layout.addWidget(self.module_rotate_cw_btn)
+        rotation_layout.addStretch()
+        layout.addLayout(rotation_layout)
+
         layout.addStretch()
         panel.setLayout(layout)
         return panel
@@ -317,10 +333,12 @@ class PropertiesPanel(QWidget):
         # Determine which panel to show
         if is_module and module_id:
             # Module is selected - show module panel
+            self.selected_module_id = module_id
             self.stacked_widget.setCurrentIndex(3)
             self.update_module_display(nodes, module_id)
         elif nodes and not connections:
             # Only nodes selected (not a module)
+            self.selected_module_id = None
             self.stacked_widget.setCurrentIndex(1)
             self.node_mode_label.setText(f"Selected: {len(nodes)} node(s)")
             
@@ -376,3 +394,12 @@ class PropertiesPanel(QWidget):
         if self.selected_image:
             self.selected_image.rotation = (self.selected_image.rotation - 90) % 360
             self.image_rotated.emit()
+    def on_module_rotate_cw(self):
+        """Rotate selected module clockwise by 90 degrees"""
+        if self.selected_module_id:
+            self.module_rotated.emit()
+
+    def on_module_rotate_ccw(self):
+        """Rotate selected module counter-clockwise by 90 degrees"""
+        if self.selected_module_id:
+            self.module_rotated.emit()

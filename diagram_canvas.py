@@ -298,6 +298,7 @@ class DiagramCanvas(QWidget):
                             self.clear_selection()
                             clicked_image.set_selected(True)
                             self.resizing_image = clicked_image
+                            self.resizing_corner = resize_handle
                             self.resize_start_pos = adjusted_pos
                             self.resize_start_dims = (clicked_image.width, clicked_image.height)
                             self.image_resize_start_dims = (clicked_image.width, clicked_image.height)
@@ -347,17 +348,26 @@ class DiagramCanvas(QWidget):
         elif self.resizing_image:
             # Handle image resizing - only for images NOT part of a module
             if not (hasattr(self.resizing_image, 'module_instance_id') and self.resizing_image.module_instance_id):
+                import math
+                
                 adjusted_pos = self.screen_to_canvas(event.pos())
                 delta_x = adjusted_pos.x() - self.resize_start_pos.x()
                 delta_y = adjusted_pos.y() - self.resize_start_pos.y()
                 
-                # Update dimensions (minimum 20x20)
-                new_width = max(20, self.resize_start_dims[0] + delta_x)
-                new_height = max(20, self.resize_start_dims[1] + delta_y)
+                # Update dimensions based on which corner (minimum 20x20)
+                if self.resizing_corner == 'tl':
+                    # Top-left: dragging left/up increases width/height
+                    new_width = max(20, self.resize_start_dims[0] + delta_x)
+                    new_height = max(20, self.resize_start_dims[1] + delta_y)
+                else:  # 'br'
+                    # Bottom-right: dragging right/down increases width/height
+                    new_width = max(20, self.resize_start_dims[0] + delta_x)
+                    new_height = max(20, self.resize_start_dims[1] + delta_y)
                 
                 self.resizing_image.width = new_width
                 self.resizing_image.height = new_height
                 self.update()
+
         elif self.dragging_image:
             # Handle image dragging - only for images NOT part of a module
             if not (hasattr(self.dragging_image, 'module_instance_id') and self.dragging_image.module_instance_id):
