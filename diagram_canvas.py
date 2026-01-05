@@ -450,6 +450,10 @@ class DiagramCanvas(QWidget):
             new_pos = self.snap_to_grid_point(new_pos)
             delta = new_pos - self.dragging_node.pos
             
+            # Determine if movement is horizontal or vertical
+            is_horizontal_move = delta.y() == 0 and delta.x() != 0
+            is_vertical_move = delta.x() == 0 and delta.y() != 0
+            
             # Check if dragging a module node - if so, move entire module
             if getattr(self.dragging_node, 'locked', False) and hasattr(self.dragging_node, 'module_id') and self.dragging_node.module_id:
                 # Move all nodes in the same module
@@ -459,13 +463,30 @@ class DiagramCanvas(QWidget):
                         node.pos = node.pos + delta
                         # Move waypoints for orthogonal connections attached to this node
                         for connection in self.connections:
-                            if connection.orthogonal:
-                                if connection.node1 == node and len(connection.waypoints) > 0:
-                                    # Move first waypoint (after start node)
-                                    connection.waypoints[0] = connection.waypoints[0] + delta
+                            if connection.orthogonal and len(connection.waypoints) > 0:
+                                if connection.node1 == node:
+                                    # Check if first waypoint is horizontal or vertical from node
+                                    if len(connection.waypoints) > 1:
+                                        first_segment_is_horizontal = connection.waypoints[0].y() == connection.waypoints[1].y()
+                                    else:
+                                        first_segment_is_horizontal = connection.waypoints[0].y() == connection.node2.pos.y()
+                                    
+                                    # Only move first waypoint if movement is perpendicular to segment
+                                    if (is_horizontal_move and first_segment_is_horizontal) or \
+                                       (is_vertical_move and not first_segment_is_horizontal):
+                                        connection.waypoints[0] = connection.waypoints[0] + delta
+                                
                                 if connection.node2 == node and len(connection.waypoints) > 1:
-                                    # Move last waypoint (before end node)
-                                    connection.waypoints[-1] = connection.waypoints[-1] + delta
+                                    # Check if last waypoint is horizontal or vertical to node
+                                    if len(connection.waypoints) > 1:
+                                        last_segment_is_horizontal = connection.waypoints[-1].y() == connection.waypoints[-2].y()
+                                    else:
+                                        last_segment_is_horizontal = connection.waypoints[-1].y() == connection.node1.pos.y()
+                                    
+                                    # Only move last waypoint if movement is perpendicular to segment
+                                    if (is_horizontal_move and last_segment_is_horizontal) or \
+                                       (is_vertical_move and not last_segment_is_horizontal):
+                                        connection.waypoints[-1] = connection.waypoints[-1] + delta
                 
                 # Also move all images in the same module instance
                 for image in self.images:
@@ -476,13 +497,30 @@ class DiagramCanvas(QWidget):
                 self.dragging_node.pos = new_pos
                 # Move waypoints for orthogonal connections attached to this node
                 for connection in self.connections:
-                    if connection.orthogonal:
-                        if connection.node1 == self.dragging_node and len(connection.waypoints) > 0:
-                            # Move first waypoint (after start node)
-                            connection.waypoints[0] = connection.waypoints[0] + delta
+                    if connection.orthogonal and len(connection.waypoints) > 0:
+                        if connection.node1 == self.dragging_node:
+                            # Check if first waypoint is horizontal or vertical from node
+                            if len(connection.waypoints) > 1:
+                                first_segment_is_horizontal = connection.waypoints[0].y() == connection.waypoints[1].y()
+                            else:
+                                first_segment_is_horizontal = connection.waypoints[0].y() == connection.node2.pos.y()
+                            
+                            # Only move first waypoint if movement is perpendicular to segment
+                            if (is_horizontal_move and first_segment_is_horizontal) or \
+                               (is_vertical_move and not first_segment_is_horizontal):
+                                connection.waypoints[0] = connection.waypoints[0] + delta
+                        
                         if connection.node2 == self.dragging_node and len(connection.waypoints) > 1:
-                            # Move last waypoint (before end node)
-                            connection.waypoints[-1] = connection.waypoints[-1] + delta
+                            # Check if last waypoint is horizontal or vertical to node
+                            if len(connection.waypoints) > 1:
+                                last_segment_is_horizontal = connection.waypoints[-1].y() == connection.waypoints[-2].y()
+                            else:
+                                last_segment_is_horizontal = connection.waypoints[-1].y() == connection.node1.pos.y()
+                            
+                            # Only move last waypoint if movement is perpendicular to segment
+                            if (is_horizontal_move and last_segment_is_horizontal) or \
+                               (is_vertical_move and not last_segment_is_horizontal):
+                                connection.waypoints[-1] = connection.waypoints[-1] + delta
             
             self.update()
 
