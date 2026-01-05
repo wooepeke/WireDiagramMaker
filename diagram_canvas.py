@@ -174,6 +174,36 @@ class DiagramCanvas(QWidget):
         """Convert screen coordinates to canvas coordinates"""
         return (screen_pos - self.pan_offset) / self.zoom_level
 
+    def _setup_module_drag(self, module_id, drag_offset):
+        """Setup module dragging - capture all positions and waypoints"""
+        self.dragging_module = module_id
+        # Store initial positions of all module nodes
+        self.module_drag_start_positions = {}
+        for node in self.nodes:
+            if hasattr(node, 'module_id') and node.module_id == module_id:
+                self.module_drag_start_positions[node] = QPoint(node.pos)
+        # Store initial positions of all module images
+        self.module_drag_start_image_positions = {}
+        for image in self.images:
+            if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
+                self.module_drag_start_image_positions[image] = QPoint(image.pos)
+        # Store initial waypoint positions for all connections related to this module
+        self.module_drag_start_waypoints = {}
+        # Get all nodes in this module
+        module_nodes_set = set()
+        for node in self.nodes:
+            if hasattr(node, 'module_id') and node.module_id == module_id:
+                module_nodes_set.add(node)
+        
+        # Find all connections touching these nodes
+        for connection in self.connections:
+            if connection.orthogonal:
+                # Check if either node of the connection is in the module
+                if connection.node1 in module_nodes_set or connection.node2 in module_nodes_set:
+                    if len(connection.waypoints) > 0:
+                        # Store a copy of the waypoint list
+                        self.module_drag_start_waypoints[connection] = [QPoint(wp) for wp in connection.waypoints]
+
 
     def mousePressEvent(self, event):
         """Handle mouse press events"""
@@ -292,38 +322,7 @@ class DiagramCanvas(QWidget):
                 # If dragging a module node, track all module positions for undo/redo
                 if getattr(clicked_node, 'locked', False) and hasattr(clicked_node, 'module_id') and clicked_node.module_id:
                     module_id = clicked_node.module_id
-                    self.dragging_module = module_id
-                    # Store initial positions of all module nodes and images
-                    self.module_drag_start_positions = {}
-                    for node in self.nodes:
-                        if hasattr(node, 'module_id') and node.module_id == module_id:
-                            self.module_drag_start_positions[node] = QPoint(node.pos)
-                    self.module_drag_start_image_positions = {}
-                    for image in self.images:
-                        if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
-                            self.module_drag_start_image_positions[image] = QPoint(image.pos)
-                    # Store initial waypoint positions for all connections related to this module
-                    self.module_drag_start_waypoints = {}
-                    # Get all nodes in this module
-                    module_nodes = set()
-                    for node in self.nodes:
-                        if hasattr(node, 'module_id') and node.module_id == module_id:
-                            module_nodes.add(node)
-                    
-                    print(f"DEBUG: Module has {len(module_nodes)} nodes")
-                    print(f"DEBUG: Total connections on canvas: {len(self.connections)}")
-                    
-                    # Find all connections touching these nodes
-                    for connection in self.connections:
-                        print(f"DEBUG: Checking connection - orthogonal={connection.orthogonal}, waypoints={len(connection.waypoints)}, node1 in module={connection.node1 in module_nodes}, node2 in module={connection.node2 in module_nodes}")
-                        if connection.orthogonal:
-                            # Check if either node of the connection is in the module
-                            if connection.node1 in module_nodes or connection.node2 in module_nodes:
-                                if len(connection.waypoints) > 0:
-                                    # Store a copy of the waypoint list
-                                    self.module_drag_start_waypoints[connection] = [QPoint(wp) for wp in connection.waypoints]
-                                    print(f"DEBUG START: Captured {len(connection.waypoints)} waypoints for connection {id(connection)}")
-                    print(f"DEBUG START: Total connections with waypoints: {len(self.module_drag_start_waypoints)}")
+                    self._setup_module_drag(module_id, adjusted_pos - clicked_node.pos)
             else:
                 # Check for waypoints on orthogonal connections FIRST (highest priority)
                 waypoint_connection = None
@@ -375,31 +374,8 @@ class DiagramCanvas(QWidget):
                                 # Start dragging from the first node
                                 self.dragging_node = module_nodes[0]
                                 self.drag_offset = adjusted_pos - self.dragging_node.pos
-                                
-                                # Track module movement
-                                self.dragging_module = module_id
-                                self.module_drag_start_positions = {}
-                                for node in self.nodes:
-                                    if hasattr(node, 'module_id') and node.module_id == module_id:
-                                        self.module_drag_start_positions[node] = QPoint(node.pos)
-                                self.module_drag_start_image_positions = {}
-                                for image in self.images:
-                                    if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
-                                        self.module_drag_start_image_positions[image] = QPoint(image.pos)
-                                # Store initial waypoint positions for all connections related to this module
-                                self.module_drag_start_waypoints = {}
-                                # Get all nodes in this module
-                                module_nodes_set = set(module_nodes)
-                                # Find all connections touching these nodes
-                                for connection in self.connections:
-                                    if connection.orthogonal:
-                                        # Check if either node of the connection is in the module
-                                        if connection.node1 in module_nodes_set or connection.node2 in module_nodes_set:
-                                            if len(connection.waypoints) > 0:
-                                                # Store a copy of the waypoint list
-                                                self.module_drag_start_waypoints[connection] = [QPoint(wp) for wp in connection.waypoints]
-                                                print(f"DEBUG START: Captured {len(connection.waypoints)} waypoints for connection {id(connection)}")
-                                print(f"DEBUG START: Total connections with waypoints: {len(self.module_drag_start_waypoints)}")
+                                # Setup module drag tracking (waypoints, positions, etc)
+                                self._setup_module_drag(module_id, self.drag_offset)
                         else:
                             # Regular image not part of a module - can be dragged independently
                             # Check if clicking on resize handle
@@ -1125,6 +1101,7 @@ class DiagramCanvas(QWidget):
             new_node.locked = node.locked
             new_nodes.append(new_node)
             node_map[node] = new_node
+            print(f"[DEBUG duplicate] Created new node '{new_node.name}' with module_id={new_instance_id}")
         
         # Duplicate all images
         for image in images_to_duplicate:
@@ -1137,6 +1114,7 @@ class DiagramCanvas(QWidget):
             new_image.rotation = image.rotation
             new_image.module_instance_id = new_instance_id
             new_images.append(new_image)
+            print(f"[DEBUG duplicate] Created new image with module_instance_id={new_instance_id}")
         
         # Duplicate all connections between nodes in this module
         connections_to_duplicate = [
@@ -1163,6 +1141,7 @@ class DiagramCanvas(QWidget):
         
         # Create and execute the action
         action = DuplicateModuleAction(self, new_nodes, new_images, new_connections, new_instance_id)
+        print(f"[DEBUG duplicate] Created DuplicateModuleAction with {len(new_nodes)} nodes, {len(new_images)} images, {len(new_connections)} connections")
         self.execute_action(action)
         
         # Select the new module
@@ -1566,6 +1545,8 @@ class DiagramCanvas(QWidget):
 
     def export_diagram(self):
         """Export the diagram as a dictionary for saving"""
+        print(f"\n[DEBUG export_diagram] Starting export with {len(self.nodes)} total nodes, {len(self.images)} total images")
+        
         diagram_data = {
             "nodes": [],
             "connections": [],
@@ -1598,6 +1579,13 @@ class DiagramCanvas(QWidget):
                 "module_id": getattr(node, 'module_id', None),
                 "locked": getattr(node, 'locked', False)
             })
+        
+        print(f"[DEBUG] Exported {len(diagram_data['nodes'])} nodes:")
+        for node_data in diagram_data["nodes"]:
+            if node_data.get("module_id"):
+                print(f"  - Node '{node_data['name']}' has module_id: {node_data['module_id']}")
+            else:
+                print(f"  - Node '{node_data['name']}' has NO module_id")
 
         # Export connections
         for connection in self.connections:
@@ -1628,6 +1616,11 @@ class DiagramCanvas(QWidget):
         # Export images
         for image in self.images:
             diagram_data["images"].append(image.to_dict())
+        
+        print(f"[DEBUG] Exported {len(diagram_data['images'])} images")
+        for image_data in diagram_data["images"]:
+            if image_data.get("module_instance_id"):
+                print(f"  - Image has module_instance_id: {image_data['module_instance_id']}")
 
         return diagram_data
 

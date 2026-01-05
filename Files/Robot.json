@@ -2794,6 +2794,214 @@
       },
       "module_id": "2bc1bc42_inst_1",
       "locked": true
+    },
+    {
+      "name": "Node1_inst9",
+      "x": 500,
+      "y": 980,
+      "class": "5V",
+      "color": {
+        "r": 255,
+        "g": 51,
+        "b": 51
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node13_inst9",
+      "x": 500,
+      "y": 960,
+      "class": "GRD",
+      "color": {
+        "r": 0,
+        "g": 0,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node14_inst9",
+      "x": 500,
+      "y": 940,
+      "class": "SCL",
+      "color": {
+        "r": 51,
+        "g": 204,
+        "b": 51
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node16_inst9",
+      "x": 500,
+      "y": 920,
+      "class": "SDA",
+      "color": {
+        "r": 51,
+        "g": 102,
+        "b": 255
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node21_inst9",
+      "x": 500,
+      "y": 900,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node22_inst9",
+      "x": 500,
+      "y": 880,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node23_inst9",
+      "x": 500,
+      "y": 860,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node24_inst9",
+      "x": 500,
+      "y": 840,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_10",
+      "locked": true
+    },
+    {
+      "name": "Node1_inst9",
+      "x": 500,
+      "y": 1180,
+      "class": "5V",
+      "color": {
+        "r": 255,
+        "g": 51,
+        "b": 51
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node13_inst9",
+      "x": 500,
+      "y": 1160,
+      "class": "GRD",
+      "color": {
+        "r": 0,
+        "g": 0,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node14_inst9",
+      "x": 500,
+      "y": 1140,
+      "class": "SCL",
+      "color": {
+        "r": 51,
+        "g": 204,
+        "b": 51
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node16_inst9",
+      "x": 500,
+      "y": 1120,
+      "class": "SDA",
+      "color": {
+        "r": 51,
+        "g": 102,
+        "b": 255
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node21_inst9",
+      "x": 500,
+      "y": 1100,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node22_inst9",
+      "x": 500,
+      "y": 1080,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node23_inst9",
+      "x": 500,
+      "y": 1060,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
+    },
+    {
+      "name": "Node24_inst9",
+      "x": 500,
+      "y": 1040,
+      "class": "Pinout",
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 0
+      },
+      "module_id": "3ea9a796_inst_11",
+      "locked": true
     }
   ],
   "connections": [
@@ -3399,6 +3607,30 @@
       "height": 184,
       "rotation": 180,
       "module_instance_id": "2bc1bc42_inst_1"
+    },
+    {
+      "type": "image",
+      "path": "C:/Users/xavie/TuDelft/Master Robotics/Thesis/SoftRobotics/WireDiagramMaker/Images/MPU6050.png",
+      "pos": {
+        "x": 372,
+        "y": 828
+      },
+      "width": 137,
+      "height": 163,
+      "rotation": 180,
+      "module_instance_id": "3ea9a796_inst_10"
+    },
+    {
+      "type": "image",
+      "path": "C:/Users/xavie/TuDelft/Master Robotics/Thesis/SoftRobotics/WireDiagramMaker/Images/MPU6050.png",
+      "pos": {
+        "x": 372,
+        "y": 1028
+      },
+      "width": 137,
+      "height": 163,
+      "rotation": 180,
+      "module_instance_id": "3ea9a796_inst_11"
     }
   ],
   "modules": [],
@@ -3408,8 +3640,8 @@
     "snap_to_grid": true,
     "zoom_level": 0.8333333333333334,
     "pan_offset": {
-      "x": 434,
-      "y": 316
+      "x": 431,
+      "y": 93
     }
   }
 }

@@ -50,6 +50,10 @@ class DiagramFileHandler:
             # Ensure the file has .json extension
             if not file_path.endswith('.json'):
                 file_path += '.json'
+            
+            print(f"[DEBUG save_diagram] Saving {len(diagram_data.get('nodes', []))} nodes, {len(diagram_data.get('images', []))} images to {file_path}")
+            nodes_with_modules = [n for n in diagram_data.get('nodes', []) if n.get('module_id')]
+            print(f"  - {len(nodes_with_modules)} nodes have module_id")
 
             with open(file_path, 'w') as f:
                 json.dump(diagram_data, f, indent=2)
@@ -67,6 +71,10 @@ class DiagramFileHandler:
 
             with open(file_path, 'r') as f:
                 data = json.load(f)
+            
+            print(f"[DEBUG load_diagram] Loaded {len(data.get('nodes', []))} nodes, {len(data.get('images', []))} images from {file_path}")
+            nodes_with_modules = [n for n in data.get('nodes', []) if n.get('module_id')]
+            print(f"  - {len(nodes_with_modules)} nodes have module_id")
 
             self.current_file = file_path
             return True, data

@@ -403,17 +403,22 @@ class DuplicateModuleAction(Action):
 
     def execute(self):
         """Add all duplicated nodes, images, and connections"""
+        print(f"[DEBUG DuplicateModule] execute() called - adding {len(self.nodes)} nodes, {len(self.images)} images, {len(self.connections)} connections")
         for node in self.nodes:
             if node not in self.canvas.nodes:
                 self.canvas.nodes.append(node)
+                print(f"  - Added node '{node.name}' with module_id: {node.module_id}")
         
         for image in self.images:
             if image not in self.canvas.images:
                 self.canvas.images.append(image)
+                print(f"  - Added image with module_instance_id: {image.module_instance_id}")
         
         for connection in self.connections:
             if connection not in self.canvas.connections:
                 self.canvas.connections.append(connection)
+                print(f"  - Added connection")
+
 
     def undo(self):
         """Remove all duplicated nodes, images, and connections"""
