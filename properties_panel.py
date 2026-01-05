@@ -18,6 +18,7 @@ class PropertiesPanel(QWidget):
     node_color_changed = pyqtSignal(QColor)
     node_class_changed = pyqtSignal(str)  # Emitted when node class changes
     connection_color_changed = pyqtSignal(QColor)
+    connection_routing_changed = pyqtSignal(bool)  # Emitted when connection routing type changes (True for orthogonal)
     image_rotated = pyqtSignal()  # Emitted when image is rotated
     module_rotated_cw = pyqtSignal()  # Emitted when module is rotated clockwise
     module_rotated_ccw = pyqtSignal()  # Emitted when module is rotated counter-clockwise
@@ -141,6 +142,18 @@ class PropertiesPanel(QWidget):
         self.conn_mode_label = QLabel()
         self.conn_mode_label.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self.conn_mode_label)
+
+        # Connection Routing Type
+        routing_layout = QHBoxLayout()
+        routing_label = QLabel("Routing:")
+        self.conn_routing_combo = QComboBox()
+        self.conn_routing_combo.addItem("Direct", False)
+        self.conn_routing_combo.addItem("Orthogonal (H-V)", True)
+        self.conn_routing_combo.currentIndexChanged.connect(self.on_connection_routing_changed)
+        routing_layout.addWidget(routing_label)
+        routing_layout.addWidget(self.conn_routing_combo)
+        routing_layout.addStretch()
+        layout.addLayout(routing_layout)
 
         # Connection Color
         color_layout = QHBoxLayout()
@@ -290,6 +303,11 @@ class PropertiesPanel(QWidget):
             self.update_connection_color_preview()
             self.connection_color_changed.emit(color)
 
+    def on_connection_routing_changed(self):
+        """Handle connection routing type change"""
+        is_orthogonal = self.conn_routing_combo.currentData()
+        self.connection_routing_changed.emit(is_orthogonal)
+
     def update_node_color_preview(self):
         """Update the node color preview button"""
         self.node_color_preview.setStyleSheet(
@@ -374,6 +392,14 @@ class PropertiesPanel(QWidget):
             # Only connections selected
             self.stacked_widget.setCurrentIndex(2)
             self.conn_mode_label.setText(f"Selected: {len(connections)} connection(s)")
+            
+            # Update routing combo to show the type of the first connection
+            if connections:
+                self.conn_routing_combo.blockSignals(True)
+                is_orthogonal = connections[0].orthogonal
+                index = 1 if is_orthogonal else 0
+                self.conn_routing_combo.setCurrentIndex(index)
+                self.conn_routing_combo.blockSignals(False)
         elif nodes and connections:
             # Both selected - show empty panel
             self.stacked_widget.setCurrentIndex(0)

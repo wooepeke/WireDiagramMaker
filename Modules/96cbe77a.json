@@ -3,7 +3,7 @@
     "name": "RaspberryPi4B",
     "nodes": [
         {
-            "name": "Node1",
+            "name": "Node1_inst1_inst1",
             "pos": {
                 "x": 1020,
                 "y": 460
@@ -16,7 +16,7 @@
             ]
         },
         {
-            "name": "Node2",
+            "name": "Node2_inst1_inst1",
             "pos": {
                 "x": 1000,
                 "y": 460
@@ -29,7 +29,7 @@
             ]
         },
         {
-            "name": "Node3",
+            "name": "Node3_inst1_inst1",
             "pos": {
                 "x": 1040,
                 "y": 460
@@ -42,228 +42,202 @@
             ]
         },
         {
-            "name": "Node4",
-            "pos": {
-                "x": 1060,
-                "y": 460
-            },
-            "class": "5V",
-            "color": [
-                255,
-                0,
-                0
-            ]
-        },
-        {
-            "name": "Node5",
-            "pos": {
-                "x": 1080,
-                "y": 460
-            },
-            "class": "5V",
-            "color": [
-                255,
-                0,
-                0
-            ]
-        },
-        {
-            "name": "Node6",
+            "name": "Node6_inst1_inst1",
             "pos": {
                 "x": 1100,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node7",
+            "name": "Node7_inst1_inst1",
             "pos": {
                 "x": 1140,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node8",
+            "name": "Node8_inst1_inst1",
             "pos": {
                 "x": 1120,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node9",
+            "name": "Node9_inst1_inst1",
             "pos": {
                 "x": 1160,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node10",
+            "name": "Node10_inst1_inst1",
             "pos": {
                 "x": 1200,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node11",
+            "name": "Node11_inst1_inst1",
             "pos": {
                 "x": 1180,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node12",
+            "name": "Node12_inst1_inst1",
             "pos": {
                 "x": 1220,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node13",
+            "name": "Node13_inst1_inst1",
             "pos": {
                 "x": 1240,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node14",
+            "name": "Node14_inst1_inst1",
             "pos": {
                 "x": 1260,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node15",
+            "name": "Node15_inst1_inst1",
             "pos": {
                 "x": 1280,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node16",
+            "name": "Node16_inst1_inst1",
             "pos": {
                 "x": 1300,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node17",
+            "name": "Node17_inst1_inst1",
             "pos": {
                 "x": 1320,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node18",
+            "name": "Node18_inst1_inst1",
             "pos": {
                 "x": 1340,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node19",
+            "name": "Node19_inst1_inst1",
             "pos": {
                 "x": 1360,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node20",
+            "name": "Node20_inst1_inst1",
             "pos": {
                 "x": 1380,
                 "y": 460
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node21",
+            "name": "Node21_inst1_inst1",
             "pos": {
                 "x": 1000,
                 "y": 480
@@ -276,7 +250,7 @@
             ]
         },
         {
-            "name": "Node22",
+            "name": "Node22_inst1_inst1",
             "pos": {
                 "x": 1020,
                 "y": 480
@@ -289,7 +263,7 @@
             ]
         },
         {
-            "name": "Node23",
+            "name": "Node23_inst1_inst1",
             "pos": {
                 "x": 1040,
                 "y": 480
@@ -302,223 +276,249 @@
             ]
         },
         {
-            "name": "Node24",
-            "pos": {
-                "x": 1060,
-                "y": 480
-            },
-            "class": "5V",
-            "color": [
-                255,
-                0,
-                0
-            ]
-        },
-        {
-            "name": "Node25",
-            "pos": {
-                "x": 1080,
-                "y": 480
-            },
-            "class": "5V",
-            "color": [
-                255,
-                0,
-                0
-            ]
-        },
-        {
-            "name": "Node26",
+            "name": "Node26_inst1_inst1",
             "pos": {
                 "x": 1100,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node27",
+            "name": "Node27_inst1_inst1",
             "pos": {
                 "x": 1120,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node28",
+            "name": "Node28_inst1_inst1",
             "pos": {
                 "x": 1140,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node29",
+            "name": "Node29_inst1_inst1",
             "pos": {
                 "x": 1160,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node30",
+            "name": "Node30_inst1_inst1",
             "pos": {
                 "x": 1180,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node31",
+            "name": "Node31_inst1_inst1",
             "pos": {
                 "x": 1200,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node32",
+            "name": "Node32_inst1_inst1",
             "pos": {
                 "x": 1220,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node33",
+            "name": "Node33_inst1_inst1",
             "pos": {
                 "x": 1240,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node34",
+            "name": "Node34_inst1_inst1",
             "pos": {
                 "x": 1260,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node35",
+            "name": "Node35_inst1_inst1",
             "pos": {
                 "x": 1280,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node36",
+            "name": "Node36_inst1_inst1",
             "pos": {
                 "x": 1300,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node37",
+            "name": "Node37_inst1_inst1",
             "pos": {
                 "x": 1320,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node38",
+            "name": "Node38_inst1_inst1",
             "pos": {
                 "x": 1340,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node39",
+            "name": "Node39_inst1_inst1",
             "pos": {
                 "x": 1360,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
                 0
             ]
         },
         {
-            "name": "Node40",
+            "name": "Node40_inst1_inst1",
             "pos": {
                 "x": 1380,
                 "y": 480
             },
-            "class": "5V",
+            "class": "Pinout",
             "color": [
                 255,
-                0,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node4",
+            "pos": {
+                "x": 1060,
+                "y": 460
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node5",
+            "pos": {
+                "x": 1080,
+                "y": 460
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node6",
+            "pos": {
+                "x": 1080,
+                "y": 480
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
+                0
+            ]
+        },
+        {
+            "name": "Node7",
+            "pos": {
+                "x": 1060,
+                "y": 480
+            },
+            "class": "Pinout",
+            "color": [
+                255,
+                255,
                 0
             ]
         }

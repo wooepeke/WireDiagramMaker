@@ -373,3 +373,49 @@ class MoveModuleAction(Action):
 
     def get_description(self):
         return f"Move module"
+
+
+class AddWaypointAction(Action):
+    """Action for adding a waypoint to a connection"""
+
+    def __init__(self, canvas, connection, waypoint, index):
+        self.canvas = canvas
+        self.connection = connection
+        self.waypoint = waypoint
+        self.index = index
+
+    def execute(self):
+        """Add the waypoint to the connection"""
+        if self.index <= len(self.connection.waypoints):
+            self.connection.waypoints.insert(self.index, self.waypoint)
+
+    def undo(self):
+        """Remove the waypoint from the connection"""
+        if self.index < len(self.connection.waypoints) and self.connection.waypoints[self.index] == self.waypoint:
+            self.connection.waypoints.pop(self.index)
+
+    def get_description(self):
+        return f"Add waypoint to connection"
+
+
+class RemoveWaypointAction(Action):
+    """Action for removing a waypoint from a connection"""
+
+    def __init__(self, canvas, connection, waypoint, index):
+        self.canvas = canvas
+        self.connection = connection
+        self.waypoint = waypoint
+        self.index = index
+
+    def execute(self):
+        """Remove the waypoint from the connection"""
+        if self.index < len(self.connection.waypoints) and self.connection.waypoints[self.index] == self.waypoint:
+            self.connection.waypoints.pop(self.index)
+
+    def undo(self):
+        """Restore the waypoint to the connection"""
+        if self.index <= len(self.connection.waypoints):
+            self.connection.waypoints.insert(self.index, self.waypoint)
+
+    def get_description(self):
+        return f"Remove waypoint from connection"

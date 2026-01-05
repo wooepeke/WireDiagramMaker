@@ -75,6 +75,9 @@ class WireDiagramMaker(QMainWindow):
         self.properties_panel.connection_color_changed.connect(
             self.on_connection_color_changed
         )
+        self.properties_panel.connection_routing_changed.connect(
+            self.on_connection_routing_changed
+        )
         self.properties_panel.image_rotated.connect(
             self.on_image_rotated
         )
@@ -391,6 +394,22 @@ class WireDiagramMaker(QMainWindow):
         """Handle connection color change from properties panel"""
         self.canvas.set_selected_connections_color(color)
         self.canvas.set_default_connection_color(color)
+
+    def on_connection_routing_changed(self, is_orthogonal):
+        """Handle connection routing type change from properties panel"""
+        # Update the default routing type for new connections
+        self.canvas.orthogonal_routing = is_orthogonal
+        
+        for connection in self.canvas.selected_connections:
+            connection.orthogonal = is_orthogonal
+            if is_orthogonal and not connection.waypoints:
+                # Generate waypoints for orthogonal routing
+                connection._generate_initial_waypoints()
+            elif not is_orthogonal:
+                # Clear waypoints for direct routing
+                connection.waypoints = []
+        self.canvas.diagram_modified.emit()
+        self.canvas.update()
 
     def on_image_rotated(self):
         """Handle image rotation from properties panel"""
@@ -748,10 +767,26 @@ class WireDiagramMaker(QMainWindow):
                 instance_number = existing_instances + 1
                 unique_instance_id = f"{module_id}_inst_{instance_number}"
                 
-                # Calculate offset for this instance
-                node_offset = 50
-                offset_x = existing_instances * node_offset
-                offset_y = existing_instances * node_offset
+                # Get the center of the current viewport
+                viewport_center = self.canvas.get_viewport_center()
+                
+                # Calculate offset to center the module at the viewport center
+                # First, find the bounding box of the module
+                if module.nodes:
+                    min_x = min(node.pos.x() for node in module.nodes)
+                    max_x = max(node.pos.x() for node in module.nodes)
+                    min_y = min(node.pos.y() for node in module.nodes)
+                    max_y = max(node.pos.y() for node in module.nodes)
+                    
+                    module_center_x = (min_x + max_x) / 2
+                    module_center_y = (min_y + max_y) / 2
+                    
+                    # Calculate the offset to move module to viewport center
+                    offset_x = viewport_center.x() - module_center_x
+                    offset_y = viewport_center.y() - module_center_y
+                else:
+                    offset_x = viewport_center.x()
+                    offset_y = viewport_center.y()
                 
                 # Add module nodes to canvas - create completely independent copies
                 for node in module.nodes:

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection, Image
-from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction, AddWaypointAction, RemoveWaypointAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -61,6 +61,10 @@ class DiagramCanvas(QWidget):
         self.dragging_module = None
         self.module_drag_start_positions = {}  # {node: start_pos, ...}
         self.module_drag_start_image_positions = {}  # {image: start_pos, ...}
+        
+        # For dragging connection waypoints
+        self.dragging_connection = None
+        self.dragging_waypoint_index = -1
 
         # Node counter for naming
         self.node_counter = 0
@@ -88,6 +92,9 @@ class DiagramCanvas(QWidget):
         self.module_edit_mode = False  # True when editing a module
         self.module_being_edited = None  # ID of the module being edited
         self.module_edit_original_positions = {}  # Store original positions for cancel: {node/image: pos}
+        
+        # Connection routing mode
+        self.orthogonal_routing = False  # True for H/V routing, False for direct lines
 
         # Undo/Redo stacks
         self.undo_stack = []
@@ -190,17 +197,18 @@ class DiagramCanvas(QWidget):
                 self.show_node_context_menu(clicked_node, event.globalPos())
                 return
             
+            # Check connection before image
+            clicked_connection = self.get_connection_at(adjusted_pos)
+            if clicked_connection:
+                self.show_connection_context_menu(clicked_connection, event.globalPos())
+                return
+            
             clicked_image = self.get_image_at(adjusted_pos)
             if clicked_image:
                 # Check if this image is part of a module
                 if hasattr(clicked_image, 'module_instance_id') and clicked_image.module_instance_id:
                     self.show_module_context_menu(clicked_image.module_instance_id, event.globalPos())
                     return
-            
-            clicked_connection = self.get_connection_at(adjusted_pos)
-            if clicked_connection:
-                self.show_connection_context_menu(clicked_connection, event.globalPos())
-                return
 
         if self.mode == "add_node":
             # Adjust position for pan offset and zoom
@@ -294,81 +302,100 @@ class DiagramCanvas(QWidget):
                         if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
                             self.module_drag_start_image_positions[image] = QPoint(image.pos)
             else:
-                # Check if an image is clicked
-                clicked_image = self.get_image_at(adjusted_pos)
-                if clicked_image:
-                    # Check if image is part of a module - if so, select/drag the entire module
-                    if hasattr(clicked_image, 'module_instance_id') and clicked_image.module_instance_id:
-                        # Find and select all nodes in this module instance
-                        module_id = clicked_image.module_instance_id
-                        module_nodes = [n for n in self.nodes if hasattr(n, 'module_id') and n.module_id == module_id]
-                        
-                        if module_nodes:
-                            # Clear and select all module nodes
-                            self.clear_selection()
-                            self.selected_module_id = module_id
-                            for node in module_nodes:
-                                self.select_node(node, multi=True)
-                            # Start dragging from the first node
-                            self.dragging_node = module_nodes[0]
-                            self.drag_offset = adjusted_pos - self.dragging_node.pos
-                            
-                            # Track module movement
-                            self.dragging_module = module_id
-                            self.module_drag_start_positions = {}
-                            for node in self.nodes:
-                                if hasattr(node, 'module_id') and node.module_id == module_id:
-                                    self.module_drag_start_positions[node] = QPoint(node.pos)
-                            self.module_drag_start_image_positions = {}
-                            for image in self.images:
-                                if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
-                                    self.module_drag_start_image_positions[image] = QPoint(image.pos)
-                    else:
-                        # Regular image not part of a module - can be dragged independently
-                        # Check if clicking on resize handle
-                        resize_handle = clicked_image.get_resize_handle_at(adjusted_pos)
-                        if resize_handle:
-                            self.clear_selection()
-                            clicked_image.set_selected(True)
-                            self.resizing_image = clicked_image
-                            self.resizing_corner = resize_handle
-                            self.resize_start_pos = adjusted_pos
-                            self.resize_start_dims = (clicked_image.width, clicked_image.height)
-                            self.image_resize_start_dims = (clicked_image.width, clicked_image.height)
-                            self.selection_changed.emit()
-                            self.update()
+                # Check for waypoints on orthogonal connections FIRST (highest priority)
+                waypoint_connection = None
+                waypoint_idx = -1
+                for connection in self.connections:
+                    if connection.orthogonal:
+                        idx = connection.get_waypoint_at(adjusted_pos)
+                        if idx >= 0:
+                            waypoint_connection = connection
+                            waypoint_idx = idx
+                            break
+                
+                if waypoint_connection and waypoint_idx >= 0:
+                    # Start dragging waypoint
+                    self.dragging_connection = waypoint_connection
+                    self.dragging_waypoint_index = waypoint_idx
+                    self.clear_selection()
+                    self.select_connection(waypoint_connection)
+                    return
+                
+                # Check if a connection is clicked (after checking waypoints)
+                clicked_connection = self.get_connection_at(adjusted_pos)
+                if clicked_connection:
+                    ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                    if ctrl_pressed:
+                        if clicked_connection in self.selected_connections:
+                            self.deselect_connection(clicked_connection)
                         else:
-                            # Regular click on image - select and prepare to drag
-                            ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                            if ctrl_pressed:
-                                if clicked_image in [img for img in self.images if img.selected]:
-                                    clicked_image.set_selected(False)
-                                else:
-                                    clicked_image.set_selected(True)
-                            else:
+                            self.select_connection(clicked_connection, multi=True)
+                    else:
+                        self.clear_selection()
+                        self.select_connection(clicked_connection)
+                else:
+                    # Check if an image is clicked (after connections)
+                    clicked_image = self.get_image_at(adjusted_pos)
+                    if clicked_image:
+                        # Check if image is part of a module - if so, select/drag the entire module
+                        if hasattr(clicked_image, 'module_instance_id') and clicked_image.module_instance_id:
+                            # Find and select all nodes in this module instance
+                            module_id = clicked_image.module_instance_id
+                            module_nodes = [n for n in self.nodes if hasattr(n, 'module_id') and n.module_id == module_id]
+                            
+                            if module_nodes:
+                                # Clear and select all module nodes
+                                self.clear_selection()
+                                self.selected_module_id = module_id
+                                for node in module_nodes:
+                                    self.select_node(node, multi=True)
+                                # Start dragging from the first node
+                                self.dragging_node = module_nodes[0]
+                                self.drag_offset = adjusted_pos - self.dragging_node.pos
+                                
+                                # Track module movement
+                                self.dragging_module = module_id
+                                self.module_drag_start_positions = {}
+                                for node in self.nodes:
+                                    if hasattr(node, 'module_id') and node.module_id == module_id:
+                                        self.module_drag_start_positions[node] = QPoint(node.pos)
+                                self.module_drag_start_image_positions = {}
+                                for image in self.images:
+                                    if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
+                                        self.module_drag_start_image_positions[image] = QPoint(image.pos)
+                        else:
+                            # Regular image not part of a module - can be dragged independently
+                            # Check if clicking on resize handle
+                            resize_handle = clicked_image.get_resize_handle_at(adjusted_pos)
+                            if resize_handle:
                                 self.clear_selection()
                                 clicked_image.set_selected(True)
-                            self.dragging_image = clicked_image
-                            self.image_drag_start_pos = clicked_image.pos
-                            self.drag_offset = adjusted_pos - clicked_image.pos
-                            self.selection_changed.emit()
-                            self.update()
-                else:
-                    # Check if a connection is clicked
-                    clicked_connection = self.get_connection_at(adjusted_pos)
-                    if clicked_connection:
-                        ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-                        if ctrl_pressed:
-                            if clicked_connection in self.selected_connections:
-                                self.deselect_connection(clicked_connection)
+                                self.resizing_image = clicked_image
+                                self.resizing_corner = resize_handle
+                                self.resize_start_pos = adjusted_pos
+                                self.resize_start_dims = (clicked_image.width, clicked_image.height)
+                                self.image_resize_start_dims = (clicked_image.width, clicked_image.height)
+                                self.selection_changed.emit()
+                                self.update()
                             else:
-                                self.select_connection(clicked_connection, multi=True)
-                        else:
-                            self.clear_selection()
-                            self.select_connection(clicked_connection)
+                                # Regular click on image - select and prepare to drag
+                                ctrl_pressed = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                                if ctrl_pressed:
+                                    if clicked_image in [img for img in self.images if img.selected]:
+                                        clicked_image.set_selected(False)
+                                    else:
+                                        clicked_image.set_selected(True)
+                                else:
+                                    self.clear_selection()
+                                    clicked_image.set_selected(True)
+                                self.dragging_image = clicked_image
+                                self.image_drag_start_pos = clicked_image.pos
+                                self.drag_offset = adjusted_pos - clicked_image.pos
+                                self.selection_changed.emit()
+                                self.update()
                     else:
                         # Clear selection if clicking on empty space
-                        self.clear_selection()
+                        self.clear_selection() 
 
     def mouseMoveEvent(self, event):
         """Handle mouse move events"""
@@ -377,6 +404,15 @@ class DiagramCanvas(QWidget):
             delta = event.pos() - self.pan_start
             self.pan_offset += delta
             self.pan_start = event.pos()
+            self.update()
+        elif self.dragging_connection and self.dragging_waypoint_index >= 0:
+            # Handle waypoint dragging for orthogonal connections
+            adjusted_pos = self.screen_to_canvas(event.pos())
+            # Snap to grid if enabled
+            adjusted_pos = self.snap_to_grid_point(adjusted_pos)
+            
+            # Update waypoint position
+            self.dragging_connection.waypoints[self.dragging_waypoint_index] = adjusted_pos
             self.update()
         elif self.resizing_image:
             # Handle image resizing - only for images NOT part of a module
@@ -421,6 +457,15 @@ class DiagramCanvas(QWidget):
                 for node in self.nodes:
                     if hasattr(node, 'module_id') and node.module_id == module_id:
                         node.pos = node.pos + delta
+                        # Move waypoints for orthogonal connections attached to this node
+                        for connection in self.connections:
+                            if connection.orthogonal:
+                                if connection.node1 == node and len(connection.waypoints) > 0:
+                                    # Move first waypoint (after start node)
+                                    connection.waypoints[0] = connection.waypoints[0] + delta
+                                if connection.node2 == node and len(connection.waypoints) > 1:
+                                    # Move last waypoint (before end node)
+                                    connection.waypoints[-1] = connection.waypoints[-1] + delta
                 
                 # Also move all images in the same module instance
                 for image in self.images:
@@ -429,6 +474,15 @@ class DiagramCanvas(QWidget):
             else:
                 # Move only this node
                 self.dragging_node.pos = new_pos
+                # Move waypoints for orthogonal connections attached to this node
+                for connection in self.connections:
+                    if connection.orthogonal:
+                        if connection.node1 == self.dragging_node and len(connection.waypoints) > 0:
+                            # Move first waypoint (after start node)
+                            connection.waypoints[0] = connection.waypoints[0] + delta
+                        if connection.node2 == self.dragging_node and len(connection.waypoints) > 1:
+                            # Move last waypoint (before end node)
+                            connection.waypoints[-1] = connection.waypoints[-1] + delta
             
             self.update()
 
@@ -438,10 +492,15 @@ class DiagramCanvas(QWidget):
             self.panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
         
+        # Clear waypoint dragging
+        self.dragging_connection = None
+        self.dragging_waypoint_index = -1
+        
         # Create action for image resize if it changed
         if self.resizing_image and (self.resizing_image.width != self.image_resize_start_dims[0] or 
                                      self.resizing_image.height != self.image_resize_start_dims[1]):
             action = ResizeImageAction(self, self.resizing_image, 
+
                                      self.image_resize_start_dims[0], 
                                      self.image_resize_start_dims[1],
                                      self.resizing_image.width, 
@@ -504,6 +563,12 @@ class DiagramCanvas(QWidget):
         config = get_config()
         color_tuple = config.get_node_class_color(self.default_node_class)
         node.color = QColor(*color_tuple)
+        
+        # If we're in module edit mode, assign the node to the module being edited
+        if self.module_edit_mode and self.module_being_edited:
+            node.module_id = self.module_being_edited
+            node.locked = False  # Keep it unlocked for editing
+        
         action = AddNodeAction(self, node)
         self.execute_action(action)
 
@@ -524,7 +589,7 @@ class DiagramCanvas(QWidget):
                (conn.node1 == node2 and conn.node2 == node1):
                 return
 
-        connection = Connection(node1, node2)
+        connection = Connection(node1, node2, orthogonal=self.orthogonal_routing)
         connection.color = node1.color  # Use the node's color for the connection
         action = AddConnectionAction(self, connection)
         self.execute_action(action)
@@ -728,6 +793,19 @@ class DiagramCanvas(QWidget):
         """Show a context menu for a connection"""
         menu = QMenu(self)
         
+        # Add waypoint options for orthogonal connections
+        if connection.orthogonal:
+            add_point_action = menu.addAction("Add Point")
+            # Store the global position for use in the handler
+            add_point_action.triggered.connect(lambda: self.add_connection_waypoint(connection, global_pos))
+            
+            # Check if there are waypoints to remove
+            if len(connection.waypoints) > 2:
+                remove_point_action = menu.addAction("Remove Closest Point")
+                remove_point_action.triggered.connect(lambda: self.remove_connection_waypoint(connection, global_pos))
+            
+            menu.addSeparator()
+        
         delete_action = menu.addAction("Delete Connection")
         delete_action.triggered.connect(lambda: self.delete_connection(connection))
         
@@ -780,6 +858,75 @@ class DiagramCanvas(QWidget):
         # Remove from selection
         self.deselect_connection(connection)
         self.update()
+
+    def add_connection_waypoint(self, connection, global_pos):
+        """Add a waypoint to an orthogonal connection at the nearest point to mouse position"""
+        if not connection.orthogonal:
+            return
+        
+        # Convert global position to canvas position
+        local_pos = self.mapFromGlobal(global_pos)
+        canvas_pos = self.screen_to_canvas(local_pos)
+        
+        # Find the closest point on the connection to the mouse position
+        segments = connection._get_orthogonal_segments()
+        min_distance = float('inf')
+        closest_segment_idx = 0
+        closest_point = None
+        
+        for seg_idx, (seg_start, seg_end) in enumerate(segments):
+            # Find closest point on this segment
+            x0, y0 = canvas_pos.x(), canvas_pos.y()
+            x1, y1 = seg_start.x(), seg_start.y()
+            x2, y2 = seg_end.x(), seg_end.y()
+            
+            if x1 == x2:  # Vertical segment
+                # Clamp y between segment endpoints
+                y = max(min(y1, y2), min(y0, max(y1, y2)))
+                closest = QPoint(x1, y)
+                distance = abs(x0 - x1)
+            else:  # Horizontal segment
+                # Clamp x between segment endpoints
+                x = max(min(x1, x2), min(x0, max(x1, x2)))
+                closest = QPoint(x, y1)
+                distance = abs(y0 - y1)
+            
+            if distance < min_distance:
+                min_distance = distance
+                closest_point = closest
+                closest_segment_idx = seg_idx
+        
+        # Add waypoint at the closest segment
+        if closest_point:
+            action = AddWaypointAction(self, connection, closest_point, closest_segment_idx)
+            self.execute_action(action)
+
+    def remove_connection_waypoint(self, connection, global_pos):
+        """Remove a waypoint from an orthogonal connection (closest to mouse position)"""
+        if not connection.orthogonal or len(connection.waypoints) <= 2:
+            return
+        
+        # Convert global position to canvas position
+        local_pos = self.mapFromGlobal(global_pos)
+        canvas_pos = self.screen_to_canvas(local_pos)
+        
+        # Find the closest waypoint (excluding start and end nodes)
+        min_distance = float('inf')
+        closest_waypoint_idx = -1
+        
+        # Skip first and last waypoints (they are the nodes themselves)
+        for i in range(1, len(connection.waypoints) - 1):
+            wp = connection.waypoints[i]
+            distance = math.sqrt((wp.x() - canvas_pos.x())**2 + (wp.y() - canvas_pos.y())**2)
+            if distance < min_distance:
+                min_distance = distance
+                closest_waypoint_idx = i
+        
+        # Remove the closest waypoint if found
+        if closest_waypoint_idx >= 0:
+            waypoint_to_remove = connection.waypoints[closest_waypoint_idx]
+            action = RemoveWaypointAction(self, connection, waypoint_to_remove, closest_waypoint_idx)
+            self.execute_action(action)
 
     def edit_module(self, module_id):
         """Enter edit mode for a module"""
@@ -917,6 +1064,22 @@ class DiagramCanvas(QWidget):
             # Clear stored positions
             self.module_edit_original_positions = {}
             print(f"Module edit cancelled: {self.module_being_edited}")
+
+    def get_viewport_center(self):
+        """Get the center point of the current viewport in canvas coordinates"""
+        # Get the center of the widget
+        widget_center_x = self.width() / 2
+        widget_center_y = self.height() / 2
+        
+        # Account for pan offset to get the actual canvas coordinates
+        canvas_center_x = widget_center_x - self.pan_offset.x()
+        canvas_center_y = widget_center_y - self.pan_offset.y()
+        
+        # Account for zoom level
+        canvas_center_x = canvas_center_x / self.zoom_level
+        canvas_center_y = canvas_center_y / self.zoom_level
+        
+        return QPoint(int(canvas_center_x), int(canvas_center_y))
 
     def set_selected_nodes_color(self, color):
         """Set color for all selected nodes"""
@@ -1254,6 +1417,15 @@ class DiagramCanvas(QWidget):
             # Find the indices of the connected nodes
             node1_idx = self.nodes.index(connection.node1)
             node2_idx = self.nodes.index(connection.node2)
+            
+            # Save waypoints for orthogonal connections
+            waypoints_data = []
+            for waypoint in connection.waypoints:
+                waypoints_data.append({
+                    "x": waypoint.x(),
+                    "y": waypoint.y()
+                })
+            
             diagram_data["connections"].append({
                 "node1": node1_idx,
                 "node2": node2_idx,
@@ -1261,7 +1433,9 @@ class DiagramCanvas(QWidget):
                     "r": connection.color.red(),
                     "g": connection.color.green(),
                     "b": connection.color.blue()
-                }
+                },
+                "orthogonal": connection.orthogonal,
+                "waypoints": waypoints_data
             })
 
         # Export images
@@ -1326,7 +1500,9 @@ class DiagramCanvas(QWidget):
                 node1_idx = conn_data["node1"]
                 node2_idx = conn_data["node2"]
                 if node1_idx in node_map and node2_idx in node_map:
-                    connection = Connection(node_map[node1_idx], node_map[node2_idx])
+                    # Restore routing type if available, default to False for backward compatibility
+                    is_orthogonal = conn_data.get("orthogonal", False)
+                    connection = Connection(node_map[node1_idx], node_map[node2_idx], orthogonal=is_orthogonal)
                     
                     # Restore color if available in the saved data
                     if "color" in conn_data:
@@ -1335,6 +1511,12 @@ class DiagramCanvas(QWidget):
                             conn_data["color"]["g"],
                             conn_data["color"]["b"]
                         )
+                    
+                    # Restore waypoints if available
+                    if "waypoints" in conn_data and is_orthogonal:
+                        connection.waypoints = []
+                        for wp_data in conn_data["waypoints"]:
+                            connection.waypoints.append(QPoint(int(wp_data["x"]), int(wp_data["y"])))
                     
                     self.connections.append(connection)
 

@@ -95,31 +95,66 @@ class Node:
 class Connection:
     """Represents a wire connection between two nodes"""
 
-    def __init__(self, node1, node2):
+    def __init__(self, node1, node2, orthogonal=False):
         """Initialize a connection"""
         config = get_config()
         self.HITBOX_DISTANCE = config.get_connection_hitbox_distance()
+        self.WAYPOINT_RADIUS = 5  # Radius of waypoint handles
         
         self.node1 = node1
         self.node2 = node2
         self.selected = False
+        self.orthogonal = orthogonal  # True for H/V routing, False for direct line
         color_tuple = config.get_connection_default_color()
         self.color = QColor(*color_tuple)
+        
+        # Waypoints for orthogonal routing (list of QPoints)
+        self.waypoints = []
+        if self.orthogonal:
+            self._generate_initial_waypoints()
+        
+        # Track which waypoint is being dragged
+        self.dragging_waypoint = None
+
+    def _generate_initial_waypoints(self):
+        """Generate initial waypoints for orthogonal routing"""
+        p1 = self.node1.get_center()
+        p2 = self.node2.get_center()
+        
+        # Create a middle waypoint at the midpoint, offset horizontally first
+        mid_x = (p1.x() + p2.x()) // 2
+        
+        self.waypoints = [
+            QPoint(mid_x, p1.y()),
+            QPoint(mid_x, p2.y())
+        ]
 
     def set_selected(self, selected):
         """Set selection state"""
         self.selected = selected
 
+    def get_waypoint_at(self, point):
+        """Get the waypoint index at the given point, or -1 if none"""
+        for i, wp in enumerate(self.waypoints):
+            if abs(wp.x() - point.x()) <= self.WAYPOINT_RADIUS and \
+               abs(wp.y() - point.y()) <= self.WAYPOINT_RADIUS:
+                return i
+        return -1
+
     def is_point_on_line(self, point):
         """Check if a point is close to the connection line"""
+        if self.orthogonal:
+            return self._is_point_on_orthogonal_line(point)
+        else:
+            return self._is_point_on_direct_line(point)
+
+    def _is_point_on_direct_line(self, point):
+        """Check if a point is close to a direct line connection"""
         x0, y0 = point.x(), point.y()
         x1, y1 = self.node1.get_center().x(), self.node1.get_center().y()
         x2, y2 = self.node2.get_center().x(), self.node2.get_center().y()
 
         # Calculate distance from point to line segment
-        # Using formula: distance = |ax + by + c| / sqrt(a^2 + b^2)
-        
-        # Line equation: (y2-y1)x - (x2-x1)y + x2*y1 - y2*x1 = 0
         num = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1)
         den = ((y2 - y1) ** 2 + (x2 - x1) ** 2) ** 0.5
         
@@ -128,7 +163,7 @@ class Connection:
         
         distance = num / den
         
-        # Also check if point is within the bounding box of the line
+        # Check if point is within the bounding box of the line
         min_x = min(x1, x2)
         max_x = max(x1, x2)
         min_y = min(y1, y2)
@@ -139,19 +174,92 @@ class Connection:
         
         return distance <= self.HITBOX_DISTANCE and in_bounds
 
+    def _is_point_on_orthogonal_line(self, point):
+        """Check if a point is close to orthogonal line segments"""
+        segments = self._get_orthogonal_segments()
+        
+        for seg_start, seg_end in segments:
+            x0, y0 = point.x(), point.y()
+            x1, y1 = seg_start.x(), seg_start.y()
+            x2, y2 = seg_end.x(), seg_end.y()
+            
+            # For axis-aligned lines, check perpendicular distance
+            if x1 == x2:  # Vertical line
+                if min(y1, y2) - self.HITBOX_DISTANCE <= y0 <= max(y1, y2) + self.HITBOX_DISTANCE:
+                    if abs(x0 - x1) <= self.HITBOX_DISTANCE:
+                        return True
+            else:  # Horizontal line
+                if min(x1, x2) - self.HITBOX_DISTANCE <= x0 <= max(x1, x2) + self.HITBOX_DISTANCE:
+                    if abs(y0 - y1) <= self.HITBOX_DISTANCE:
+                        return True
+        
+        return False
+
+    def _get_orthogonal_segments(self):
+        """Get list of line segments for orthogonal routing"""
+        segments = []
+        p1 = self.node1.get_center()
+        
+        # Start from node1 to first waypoint
+        current = p1
+        for wp in self.waypoints:
+            segments.append((current, wp))
+            current = wp
+        
+        # Final segment to node2
+        p2 = self.node2.get_center()
+        segments.append((current, p2))
+        
+        return segments
+
     def draw(self, painter):
         """Draw the connection"""
-        # Draw line - use thicker width when selected instead of changing color
-        if self.selected:
-            painter.setPen(QPen(self.color, 4))  # Thicker line for selected
+        if self.orthogonal:
+            self._draw_orthogonal(painter)
         else:
-            painter.setPen(QPen(self.color, 2))  # Normal width
+            self._draw_direct(painter)
+
+    def _draw_direct(self, painter):
+        """Draw direct line connection"""
+        if self.selected:
+            painter.setPen(QPen(self.color, 4))
+        else:
+            painter.setPen(QPen(self.color, 2))
         
         painter.drawLine(self.node1.get_center(), self.node2.get_center())
 
         # Draw connection points as small circles
         if self.selected:
-            # Selected connection - thicker outline
+            painter.setBrush(QBrush(self.color))
+            painter.setPen(QPen(self.color, 2))
+        else:
+            painter.setBrush(QBrush(self.color))
+            painter.setPen(QPen(self.color, 1))
+        
+        painter.drawEllipse(self.node1.get_center(), 4, 4)
+        painter.drawEllipse(self.node2.get_center(), 4, 4)
+
+    def _draw_orthogonal(self, painter):
+        """Draw orthogonal (H/V) line connection"""
+        # Draw line segments
+        if self.selected:
+            painter.setPen(QPen(self.color, 4))
+        else:
+            painter.setPen(QPen(self.color, 2))
+        
+        segments = self._get_orthogonal_segments()
+        for seg_start, seg_end in segments:
+            painter.drawLine(seg_start, seg_end)
+
+        # Draw waypoint handles if selected
+        if self.selected:
+            painter.setBrush(QBrush(QColor(255, 100, 100)))
+            painter.setPen(QPen(QColor(200, 50, 50), 2))
+            for wp in self.waypoints:
+                painter.drawEllipse(wp, self.WAYPOINT_RADIUS, self.WAYPOINT_RADIUS)
+
+        # Draw connection points as small circles
+        if self.selected:
             painter.setBrush(QBrush(self.color))
             painter.setPen(QPen(self.color, 2))
         else:
@@ -205,12 +313,8 @@ class Module:
         
         images_data = []
         for image in self.images:
-            images_data.append({
-                "path": image.image_path,
-                "pos": {"x": image.pos.x(), "y": image.pos.y()},
-                "width": image.width,
-                "height": image.height
-            })
+            # Use image.to_dict() to preserve all image properties including rotation
+            images_data.append(image.to_dict())
         
         return {
             "id": self.module_id,
@@ -232,12 +336,8 @@ class Module:
             module.add_node(node)
         
         for image_data in module_dict.get("images", []):
-            image = Image(
-                image_data["path"],
-                QPoint(int(image_data["pos"]["x"]), int(image_data["pos"]["y"])),
-                image_data.get("width", 100),
-                image_data.get("height", 100)
-            )
+            # Use Image.from_dict() to properly restore all image properties
+            image = Image.from_dict(image_data)
             module.add_image(image)
         
         return module
@@ -426,7 +526,8 @@ class Image:
             "pos": {"x": self.pos.x(), "y": self.pos.y()},
             "width": self.width,
             "height": self.height,
-            "rotation": self.rotation
+            "rotation": self.rotation,
+            "module_instance_id": getattr(self, 'module_instance_id', None)
         }
 
     @staticmethod
@@ -439,4 +540,5 @@ class Image:
             image_dict.get("height", 100)
         )
         image.rotation = image_dict.get("rotation", 0)
+        image.module_instance_id = image_dict.get("module_instance_id", None)
         return image
