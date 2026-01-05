@@ -375,6 +375,48 @@ class MoveModuleAction(Action):
         return f"Move module"
 
 
+class DuplicateModuleAction(Action):
+    """Action for duplicating a module with all its nodes, images, and connections"""
+
+    def __init__(self, canvas, nodes, images, connections, new_module_id):
+        self.canvas = canvas
+        self.nodes = nodes  # List of new nodes to add
+        self.images = images  # List of new images to add
+        self.connections = connections  # List of new connections to add
+        self.new_module_id = new_module_id
+
+    def execute(self):
+        """Add all duplicated nodes, images, and connections"""
+        for node in self.nodes:
+            if node not in self.canvas.nodes:
+                self.canvas.nodes.append(node)
+        
+        for image in self.images:
+            if image not in self.canvas.images:
+                self.canvas.images.append(image)
+        
+        for connection in self.connections:
+            if connection not in self.canvas.connections:
+                self.canvas.connections.append(connection)
+
+    def undo(self):
+        """Remove all duplicated nodes, images, and connections"""
+        for node in self.nodes:
+            if node in self.canvas.nodes:
+                self.canvas.nodes.remove(node)
+        
+        for image in self.images:
+            if image in self.canvas.images:
+                self.canvas.images.remove(image)
+        
+        for connection in self.connections:
+            if connection in self.canvas.connections:
+                self.canvas.connections.remove(connection)
+
+    def get_description(self):
+        return f"Duplicate module"
+
+
 class AddWaypointAction(Action):
     """Action for adding a waypoint to a connection"""
 

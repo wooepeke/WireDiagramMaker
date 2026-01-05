@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection, Image
-from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction, AddWaypointAction, RemoveWaypointAction
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction, AddWaypointAction, RemoveWaypointAction, DuplicateModuleAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -818,6 +818,9 @@ class DiagramCanvas(QWidget):
         edit_action = menu.addAction("Edit Module")
         edit_action.triggered.connect(lambda: self.edit_module(module_id))
         
+        duplicate_action = menu.addAction("Duplicate Module")
+        duplicate_action.triggered.connect(lambda: self.duplicate_module(module_id))
+        
         menu.addSeparator()
         
         delete_action = menu.addAction("Delete Module")
@@ -983,6 +986,107 @@ class DiagramCanvas(QWidget):
         
         self.diagram_modified.emit()
         self.update()
+
+    def duplicate_module(self, module_id):
+        """Duplicate a module instance with all its nodes, images, and connections"""
+        # Find all nodes in this module
+        nodes_to_duplicate = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == module_id]
+        images_to_duplicate = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == module_id]
+        
+        if not nodes_to_duplicate:
+            return
+        
+        # Generate a new module instance ID
+        # Extract the base module ID from the instance ID (e.g., "module_id_inst_1" -> "module_id")
+        parts = module_id.split("_inst_")
+        if len(parts) == 2:
+            base_module_id = parts[0]
+            try:
+                current_instance = int(parts[1])
+            except ValueError:
+                current_instance = 0
+        else:
+            base_module_id = module_id
+            current_instance = 0
+        
+        # Find the next available instance number
+        existing_instances = [n for n in self.nodes if hasattr(n, 'module_id') and n.module_id.startswith(f"{base_module_id}_inst_")]
+        max_instance = 0
+        for node in existing_instances:
+            try:
+                inst_num = int(node.module_id.split("_inst_")[1])
+                max_instance = max(max_instance, inst_num)
+            except (ValueError, IndexError):
+                pass
+        
+        new_instance_id = f"{base_module_id}_inst_{max_instance + 1}"
+        
+        # Offset for the new module (move it slightly down-right)
+        offset = QPoint(50, 50)
+        
+        # Create a mapping from old node to new node
+        node_map = {}
+        new_nodes = []
+        new_images = []
+        new_connections = []
+        
+        # Duplicate all nodes
+        for node in nodes_to_duplicate:
+            new_node = Node(
+                node.name,
+                QPoint(node.pos.x() + offset.x(), node.pos.y() + offset.y())
+            )
+            new_node.node_class = node.node_class
+            new_node.color = QColor(node.color.red(), node.color.green(), node.color.blue())
+            new_node.module_id = new_instance_id
+            new_node.locked = node.locked
+            new_nodes.append(new_node)
+            node_map[node] = new_node
+        
+        # Duplicate all images
+        for image in images_to_duplicate:
+            new_image = Image(
+                image.image_path,
+                QPoint(image.pos.x() + offset.x(), image.pos.y() + offset.y()),
+                image.width,
+                image.height
+            )
+            new_image.rotation = image.rotation
+            new_image.module_instance_id = new_instance_id
+            new_images.append(new_image)
+        
+        # Duplicate all connections between nodes in this module
+        connections_to_duplicate = [
+            conn for conn in self.connections 
+            if conn.node1 in node_map and conn.node2 in node_map
+        ]
+        
+        for conn in connections_to_duplicate:
+            new_connection = Connection(
+                node_map[conn.node1],
+                node_map[conn.node2],
+                orthogonal=conn.orthogonal
+            )
+            new_connection.color = QColor(conn.color.red(), conn.color.green(), conn.color.blue())
+            
+            # Duplicate waypoints if they exist
+            if conn.waypoints:
+                new_connection.waypoints = [
+                    QPoint(wp.x() + offset.x(), wp.y() + offset.y()) 
+                    for wp in conn.waypoints
+                ]
+            
+            new_connections.append(new_connection)
+        
+        # Create and execute the action
+        action = DuplicateModuleAction(self, new_nodes, new_images, new_connections, new_instance_id)
+        self.execute_action(action)
+        
+        # Select the new module
+        self.clear_selection()
+        self.selected_module_id = new_instance_id
+        for node in new_nodes:
+            self.select_node(node, multi=True)
 
     def save_module_edits(self):
         """Save changes made to a module during edit mode"""
