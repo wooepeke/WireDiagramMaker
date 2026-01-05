@@ -61,6 +61,7 @@ class DiagramCanvas(QWidget):
         self.dragging_module = None
         self.module_drag_start_positions = {}  # {node: start_pos, ...}
         self.module_drag_start_image_positions = {}  # {image: start_pos, ...}
+        self.module_drag_start_waypoints = {}  # {connection: [waypoints], ...}
         
         # For dragging connection waypoints
         self.dragging_connection = None
@@ -301,6 +302,28 @@ class DiagramCanvas(QWidget):
                     for image in self.images:
                         if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
                             self.module_drag_start_image_positions[image] = QPoint(image.pos)
+                    # Store initial waypoint positions for all connections related to this module
+                    self.module_drag_start_waypoints = {}
+                    # Get all nodes in this module
+                    module_nodes = set()
+                    for node in self.nodes:
+                        if hasattr(node, 'module_id') and node.module_id == module_id:
+                            module_nodes.add(node)
+                    
+                    print(f"DEBUG: Module has {len(module_nodes)} nodes")
+                    print(f"DEBUG: Total connections on canvas: {len(self.connections)}")
+                    
+                    # Find all connections touching these nodes
+                    for connection in self.connections:
+                        print(f"DEBUG: Checking connection - orthogonal={connection.orthogonal}, waypoints={len(connection.waypoints)}, node1 in module={connection.node1 in module_nodes}, node2 in module={connection.node2 in module_nodes}")
+                        if connection.orthogonal:
+                            # Check if either node of the connection is in the module
+                            if connection.node1 in module_nodes or connection.node2 in module_nodes:
+                                if len(connection.waypoints) > 0:
+                                    # Store a copy of the waypoint list
+                                    self.module_drag_start_waypoints[connection] = [QPoint(wp) for wp in connection.waypoints]
+                                    print(f"DEBUG START: Captured {len(connection.waypoints)} waypoints for connection {id(connection)}")
+                    print(f"DEBUG START: Total connections with waypoints: {len(self.module_drag_start_waypoints)}")
             else:
                 # Check for waypoints on orthogonal connections FIRST (highest priority)
                 waypoint_connection = None
@@ -363,6 +386,20 @@ class DiagramCanvas(QWidget):
                                 for image in self.images:
                                     if hasattr(image, 'module_instance_id') and image.module_instance_id == module_id:
                                         self.module_drag_start_image_positions[image] = QPoint(image.pos)
+                                # Store initial waypoint positions for all connections related to this module
+                                self.module_drag_start_waypoints = {}
+                                # Get all nodes in this module
+                                module_nodes_set = set(module_nodes)
+                                # Find all connections touching these nodes
+                                for connection in self.connections:
+                                    if connection.orthogonal:
+                                        # Check if either node of the connection is in the module
+                                        if connection.node1 in module_nodes_set or connection.node2 in module_nodes_set:
+                                            if len(connection.waypoints) > 0:
+                                                # Store a copy of the waypoint list
+                                                self.module_drag_start_waypoints[connection] = [QPoint(wp) for wp in connection.waypoints]
+                                                print(f"DEBUG START: Captured {len(connection.waypoints)} waypoints for connection {id(connection)}")
+                                print(f"DEBUG START: Total connections with waypoints: {len(self.module_drag_start_waypoints)}")
                         else:
                             # Regular image not part of a module - can be dragged independently
                             # Check if clicking on resize handle
@@ -570,14 +607,21 @@ class DiagramCanvas(QWidget):
                 # Get current positions
                 new_node_positions = {node: QPoint(node.pos) for node in self.module_drag_start_positions.keys()}
                 new_image_positions = {image: QPoint(image.pos) for image in self.module_drag_start_image_positions.keys()}
+                # Get current waypoint positions
+                new_waypoint_positions = {}
+                for conn in self.module_drag_start_waypoints.keys():
+                    new_waypoint_positions[conn] = [QPoint(wp) for wp in conn.waypoints]
+                    print(f"DEBUG END: Connection {id(conn)}: {len(self.module_drag_start_waypoints[conn])} old waypoints -> {len(new_waypoint_positions[conn])} new waypoints")
+                
+                print(f"DEBUG END: Creating MoveModuleAction with {len(self.module_drag_start_waypoints)} waypoint dicts")
                 
                 action = MoveModuleAction(
                     self, 
                     self.dragging_module,
                     list(self.module_drag_start_positions.keys()),
                     list(self.module_drag_start_image_positions.keys()),
-                    {"nodes": self.module_drag_start_positions, "images": self.module_drag_start_image_positions},
-                    {"nodes": new_node_positions, "images": new_image_positions}
+                    {"nodes": self.module_drag_start_positions, "images": self.module_drag_start_image_positions, "waypoints": self.module_drag_start_waypoints},
+                    {"nodes": new_node_positions, "images": new_image_positions, "waypoints": new_waypoint_positions}
                 )
                 self.execute_action(action)
         
@@ -590,6 +634,7 @@ class DiagramCanvas(QWidget):
         self.dragging_module = None
         self.module_drag_start_positions = {}
         self.module_drag_start_image_positions = {}
+        self.module_drag_start_waypoints = {}
 
     def add_node(self, pos):
         """Add a new node at the given position"""

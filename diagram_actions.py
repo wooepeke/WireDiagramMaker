@@ -356,6 +356,9 @@ class MoveModuleAction(Action):
         self.new_node_positions = new_positions["nodes"]
         self.old_image_positions = old_positions["images"]  # Dict: image -> QPoint
         self.new_image_positions = new_positions["images"]
+        # Handle waypoints for backward compatibility with old files
+        self.old_waypoints = old_positions.get("waypoints", {})  # Dict: connection -> list of QPoint
+        self.new_waypoints = new_positions.get("waypoints", {})
 
     def execute(self):
         """Move all nodes and images to their new positions"""
@@ -363,13 +366,26 @@ class MoveModuleAction(Action):
             node.pos = pos
         for image, pos in self.new_image_positions.items():
             image.pos = pos
+        # Restore waypoints to their new positions (if available)
+        if hasattr(self, 'new_waypoints') and self.new_waypoints:
+            for connection, waypoints in self.new_waypoints.items():
+                connection.waypoints = [QPoint(wp) for wp in waypoints]
 
     def undo(self):
         """Restore all nodes and images to their old positions"""
+        print(f"DEBUG UNDO: MoveModuleAction.undo() called")
         for node, pos in self.old_node_positions.items():
             node.pos = pos
         for image, pos in self.old_image_positions.items():
             image.pos = pos
+        # Restore waypoints to their old positions (if available)
+        if hasattr(self, 'old_waypoints') and self.old_waypoints:
+            print(f"DEBUG UNDO: Restoring {len(self.old_waypoints)} connections with waypoints")
+            for connection, waypoints in self.old_waypoints.items():
+                print(f"DEBUG UNDO: Connection {id(connection)}: restoring {len(waypoints)} waypoints")
+                connection.waypoints = [QPoint(wp) for wp in waypoints]
+        else:
+            print(f"DEBUG UNDO: No waypoints to restore (old_waypoints={getattr(self, 'old_waypoints', 'N/A')})")
 
     def get_description(self):
         return f"Move module"
