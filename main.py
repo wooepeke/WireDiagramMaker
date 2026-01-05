@@ -761,7 +761,7 @@ class WireDiagramMaker(QMainWindow):
             if module:
                 # Count how many instances of this module already exist
                 # Look for nodes with module_id pattern: "original_id_inst_1", "original_id_inst_2", etc.
-                existing_instances = len([n for n in self.canvas.nodes if hasattr(n, 'module_id') and n.module_id.startswith(f"{module_id}_inst_")])
+                existing_instances = len([n for n in self.canvas.nodes if hasattr(n, 'module_id') and n.module_id and n.module_id.startswith(f"{module_id}_inst_")])
                 
                 # Create a UNIQUE instance ID for this loaded instance
                 instance_number = existing_instances + 1
