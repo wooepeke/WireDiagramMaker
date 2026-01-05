@@ -438,6 +438,78 @@ class DuplicateModuleAction(Action):
         return f"Duplicate module"
 
 
+class DeleteModuleAction(Action):
+    """Action for deleting a complete module as a SINGLE atomic operation"""
+
+    def __init__(self, canvas, module_id, nodes, images, connections, selected_module_id):
+        self.canvas = canvas
+        self.module_id = module_id
+        # Store exact references to all elements in the module
+        self.nodes = nodes
+        self.images = images
+        self.connections = connections
+        self.selected_module_id = selected_module_id
+        
+        print(f"[DEBUG DeleteModuleAction.__init__] Capturing ENTIRE module '{module_id}':")
+        print(f"  - Nodes: {[n.name for n in self.nodes]}")
+        print(f"  - Images: {len(self.images)}")
+        print(f"  - Connections: {len(self.connections)}")
+
+    def execute(self):
+        """Remove the ENTIRE module as one atomic operation"""
+        print(f"[DEBUG DeleteModuleAction.execute] Removing entire module '{self.module_id}'")
+        
+        # Remove connections first (to avoid dangling references)
+        for connection in self.connections:
+            if connection in self.canvas.connections:
+                self.canvas.connections.remove(connection)
+        print(f"  ✓ Removed {len(self.connections)} connections")
+        
+        # Remove nodes
+        for node in self.nodes:
+            if node in self.canvas.nodes:
+                self.canvas.nodes.remove(node)
+        print(f"  ✓ Removed {len(self.nodes)} nodes")
+        
+        # Remove images
+        for image in self.images:
+            if image in self.canvas.images:
+                self.canvas.images.remove(image)
+        print(f"  ✓ Removed {len(self.images)} images")
+
+    def undo(self):
+        """Restore the ENTIRE module as one atomic operation"""
+        print(f"[DEBUG DeleteModuleAction.undo] Restoring entire module '{self.module_id}'")
+        
+        # Restore nodes first
+        for node in self.nodes:
+            if node not in self.canvas.nodes:
+                self.canvas.nodes.append(node)
+        print(f"  ✓ Restored {len(self.nodes)} nodes")
+        
+        # Restore images
+        for image in self.images:
+            if image not in self.canvas.images:
+                self.canvas.images.append(image)
+        print(f"  ✓ Restored {len(self.images)} images")
+        
+        # Restore connections last (after all nodes exist)
+        for connection in self.connections:
+            if connection not in self.canvas.connections:
+                self.canvas.connections.append(connection)
+        print(f"  ✓ Restored {len(self.connections)} connections")
+        
+        # Restore selection if this module was selected
+        if self.selected_module_id == self.module_id:
+            self.canvas.selected_module_id = self.module_id
+            print(f"  ✓ Restored module selection")
+
+    def get_description(self):
+        return f"Delete module"
+
+
+
+
 class AddWaypointAction(Action):
     """Action for adding a waypoint to a connection"""
 

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QWidget, QMenu
 from PyQt5.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from diagram_elements import Node, Connection, Image
-from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction, AddWaypointAction, RemoveWaypointAction, DuplicateModuleAction
+from diagram_actions import AddNodeAction, AddConnectionAction, DeleteNodeAction, DeleteConnectionAction, AddImageAction, DeleteImageAction, MoveImageAction, ResizeImageAction, MoveModuleAction, AddWaypointAction, RemoveWaypointAction, DuplicateModuleAction, DeleteModuleAction
 from properties_dialog import NodePropertiesDialog
 from config_loader import get_config
 
@@ -96,6 +96,9 @@ class DiagramCanvas(QWidget):
         
         # Connection routing mode
         self.orthogonal_routing = False  # True for H/V routing, False for direct lines
+
+        # Flag to prevent individual delete actions during module deletion
+        self._deleting_module = False
 
         # Undo/Redo stacks
         self.undo_stack = []
@@ -768,25 +771,21 @@ class DiagramCanvas(QWidget):
             else:
                 non_module_nodes.append(node)
         
-        # Collect nodes to delete
+        # Delete modules using the proper action system
+        for module_id in module_ids_to_delete:
+            print(f"[DEBUG keyPressEvent] Deleting module '{module_id}' from Delete key")
+            self.delete_module(module_id)
+        
+        # Collect non-module nodes to delete
         nodes_to_delete = list(non_module_nodes)
         
-        # Find all nodes in the modules to be deleted
-        module_nodes_list = []
-        if module_ids_to_delete:
-            module_nodes_list = [
-                node for node in self.nodes 
-                if hasattr(node, 'module_id') and node.module_id in module_ids_to_delete
-            ]
-            nodes_to_delete.extend(module_nodes_list)
-        
-        # Create delete actions for nodes and connections
+        # Create delete actions for non-module nodes
         for node in nodes_to_delete:
             if node in self.nodes:
                 action = DeleteNodeAction(self, node)
                 self.execute_action(action)
         
-        # Delete selected connections
+        # Delete selected connections (that aren't part of a deleted module)
         for conn in self.selected_connections:
             if conn in self.connections:
                 action = DeleteConnectionAction(self, conn)
@@ -797,26 +796,6 @@ class DiagramCanvas(QWidget):
             if image in self.images and not (hasattr(image, 'module_instance_id') and image.module_instance_id):
                 action = DeleteImageAction(self, image)
                 self.execute_action(action)
-        
-        # Delete modules directly (not undoable)
-        if module_ids_to_delete:
-            module_images = [
-                img for img in self.images
-                if hasattr(img, 'module_instance_id') and img.module_instance_id in module_ids_to_delete
-            ]
-            # Delete all module nodes
-            for node in module_nodes_list:
-                if node in self.nodes:
-                    self.nodes.remove(node)
-            # Delete all connections involving module nodes
-            self.connections = [
-                conn for conn in self.connections
-                if not any(node in module_nodes_list for node in [conn.node1, conn.node2])
-            ]
-            # Delete all module images
-            for image in module_images:
-                if image in self.images:
-                    self.images.remove(image)
         
         self.clear_selection()
 
@@ -1020,31 +999,50 @@ class DiagramCanvas(QWidget):
         self.update()
 
     def delete_module(self, module_id):
-        """Delete a module and all its elements"""
-        # Find and delete all nodes in this module
+        """Delete a module and all its elements as a SINGLE undo action"""
+        # Find all nodes in this module
         nodes_to_delete = [node for node in self.nodes if hasattr(node, 'module_id') and node.module_id == module_id]
-        for node in nodes_to_delete:
-            # Remove connections
-            self.connections = [
-                conn for conn in self.connections
-                if conn.node1 != node and conn.node2 != node
-            ]
-            # Remove node
-            if node in self.nodes:
-                self.nodes.remove(node)
         
-        # Find and delete all images in this module
+        if not nodes_to_delete:
+            return
+        
+        print(f"\n[DEBUG delete_module] Starting deletion of module '{module_id}'")
+        print(f"  - Found {len(nodes_to_delete)} nodes in module: {[n.name for n in nodes_to_delete]}")
+        
+        # Find all connections to delete (connections between nodes in this module)
+        # and also connections that touch nodes in this module
+        connections_to_delete = []
+        for connection in self.connections:
+            if connection.node1 in nodes_to_delete or connection.node2 in nodes_to_delete:
+                connections_to_delete.append(connection)
+                node1_in = connection.node1 in nodes_to_delete
+                node2_in = connection.node2 in nodes_to_delete
+                print(f"  - Found connection: {connection.node1.name}({node1_in}) -> {connection.node2.name}({node2_in})")
+        
+        # Find all images in this module
         images_to_delete = [img for img in self.images if hasattr(img, 'module_instance_id') and img.module_instance_id == module_id]
-        for image in images_to_delete:
-            if image in self.images:
-                self.images.remove(image)
+        print(f"  - Found {len(images_to_delete)} images in module")
+        print(f"  - Found {len(connections_to_delete)} total connections to delete")
+        
+        # Capture the currently selected module ID
+        current_selected = self.selected_module_id
+        
+        # Create the delete action BEFORE actually deleting anything
+        action = DeleteModuleAction(self, module_id, nodes_to_delete, images_to_delete, connections_to_delete, current_selected)
+        
+        # Set flag to prevent individual delete actions from being created
+        self._deleting_module = True
+        
+        # Execute the delete action
+        self.execute_action(action)
+        
+        # Reset flag
+        self._deleting_module = False
         
         # Clear selection if it was this module
         if self.selected_module_id == module_id:
             self.clear_selection()
-        
-        self.diagram_modified.emit()
-        self.update()
+
 
     def duplicate_module(self, module_id):
         """Duplicate a module instance with all its nodes, images, and connections"""
